@@ -1,0 +1,77 @@
+package simulation;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+
+public class SimulationEngineParameters extends EngineParameters {
+
+	public SimulationEngineParameters(String[] args) {
+		super(args);
+	}
+
+//
+//	Example code to create two engine parameters: 'hasStreamStatus' and
+//	'streamFrequency', plus a derived parameter 'twostreamFrequency'.
+//
+//	A build directory name is constructed based on these parameters and
+//	the default max-file name and target parameters.
+//
+
+//
+//	private static final String s_hasStreamStatus = "hasStreamStatus";
+//	private static final String s_streamFrequency = "streamFrequency";
+//	private static final String s_twofreq = "twostreamFrequency";
+	private static final String i_startMPPRCT = "startMPPRCT";
+	private static final String i_endMPPRCT = "endMPPRCT";
+	private static final String i_MPPRThreads = "MPPRThreads";
+//
+//
+//	@Override
+	@Override
+	protected void declarations() {
+//		declareParam(s_hasStreamStatus, DataType.BOOL, false);
+//		declareParam(s_streamFrequency, DataType.INT, 150);
+//		declareDerivedParam(s_twofreq, DataType.INT);
+		declareParam(i_startMPPRCT, DataType.INT, 1);
+		declareParam(i_endMPPRCT, DataType.INT, 4);
+		declareParam(i_MPPRThreads, DataType.INT, 4);
+	}
+//
+//	@Override
+//	protected void deriveParameters() {
+//		deriveParam(s_twofreq, 2 * getStreamFrequency());
+//	}
+//
+//	@Override
+//	protected void validate() {
+//		if (getStreamFrequency() <= 0)
+//			throw new IllegalArgumentException("Stream frequency should be > 0.");
+//	}
+//
+//	public boolean getHasStreamStatus() {
+//		return getParam(s_hasStreamStatus);
+//	}
+//
+//	public int getStreamFrequency() {
+//		return getParam(s_streamFrequency);
+//	}
+//
+//	public int getTwofreq(){
+//		return getParam(s_twofreq);
+//	}
+//
+	public int getMPPRStart() {
+		return getParam(i_startMPPRCT);
+	}
+
+	public int getMPPREnd() {
+		return getParam(i_endMPPRCT);
+	}
+
+	public int getMPPRNumThreads() {
+		return getParam(i_MPPRThreads);
+	}
+//	@Override
+//	public String getBuildName() {
+//		return getMaxFileName() + "_" + getTarget() + "_ss" + getHasStreamStatus() + "_sf" + getStreamFrequency();
+//	}
+}

@@ -1,0 +1,229 @@
+package simulation;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.KernelMath;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.LMemCommandStream;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.WrapMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.utils.MathUtils;
+
+class SimulationKernel extends Kernel {
+
+	private static final DFEType type = dfeInt(32);
+	private static final DFEType double_type = dfeFloat(11,53);
+	private static final DFEType long_type = dfeInt(80);
+
+	protected SimulationKernel(KernelParameters parameters) {
+		super(parameters);
+
+		DFEVectorType<DFEVar> vectorVars =
+			new DFEVectorType<DFEVar>(dfeFloat(11,53), 6); // The real size of the vector is 5 but the program would not compile
+
+		DFEVectorType<DFEVar> SynapsesVector =
+			new DFEVectorType<DFEVar>(dfeFloat(11,53), 12); // The real size of the vector is 11 but the program would not compile
+
+		int loop2Length = 4;	// Same with manager
+
+		OffsetExpr loopLength = stream.makeOffsetAutoLoop("loopLength");
+		DFEVar loopLengthVal = loopLength.getDFEVar(this, dfeUInt(32));
+
+		DFEVar N = io.scalarInput("N", dfeUInt(32));	// Number of Input Neurons
+		DFEVar M_S = io.scalarInput("M_S", dfeUInt(32));	// Number of Adex Source Neurons
+		DFEVar M_T = io.scalarInput("M_T", dfeUInt(32));	// Number of Adex Target Neurons
+		DFEVar steps = io.scalarInput("Steps", dfeUInt(32));	// Steps of Simulation
+		DFEVar totalBurstsX = io.scalarInput("totalBurstsX",dfeUInt(32));
+		DFEVar wordsPerBurstX = io.scalarInput("wordsPerBurstX",dfeUInt(32));
+		DFEVar totalBurstsSyn = io.scalarInput("totalBurstsSyn",dfeUInt(32));
+		DFEVar wordsPerBurstSyn = io.scalarInput("wordsPerBurstSyn",dfeUInt(32));
+		//debug.simPrintf("totalBurstsX = %d, wordsPerBurstX = %d, totalBurstsSyn = %d, wordsPerBurstSyn = %d, steps = %d\n", totalBurstsX, wordsPerBurstX, totalBurstsSyn, wordsPerBurstSyn, steps);
+
+		int adex_params_size = 16; // for allignment
+		int adex_params_addrBits = MathUtils.bitsToAddress(adex_params_size);
+
+		int stdp_params_size = 32;
+		int stdp_params_addrBits = MathUtils.bitsToAddress(stdp_params_size);
+
+		Count.Params paramsOne = control.count.makeParams(stdp_params_addrBits+1)	// Counter up to 16 for saving the 16 values of adex params in FMEM
+		.withMax(32)
+		.withInc(1)
+		.withWrapMode(WrapMode.STOP_AT_MAX);
+		Counter counterOne = control.count.makeCounter(paramsOne);
+		counterOne.getCount().simWatch("counterOne");
+
+		// Counters for reading Neurons and Synapses
+
+		//First loop counters
+		CounterChain chainA = control.count.makeCounterChain(counterOne.getCount()>31);
+		DFEVar stepA = chainA.addCounter(steps,1);
+		DFEVar loopA = chainA.addCounter(3,1);
+		DFEVar burstCountA = chainA.addCounter(totalBurstsX,1);
+		DFEVar wordCountA = chainA.addCounter(wordsPerBurstX,1);
+		DFEVar tempA_1_max = M_S+N;
+		DFEVar tempA_1 = chainA.addCounter(tempA_1_max,1);
+		DFEVar tempA_2 = chainA.addCounter(/*loopLengthVal*/16,1);
+
+		DFEVar n = tempA_1;
+		DFEVar m = burstCountA*wordsPerBurstX + wordCountA;
+
+		CounterChain chainB = control.count.makeCounterChain(counterOne.getCount()>31);
+		DFEVar stepB = chainB.addCounter(steps,1);
+		DFEVar loopB = chainB.addCounter(3,1);
+		DFEVar burstCountB = chainB.addCounter(totalBurstsSyn,1);
+		DFEVar wordCountB = chainB.addCounter(wordsPerBurstSyn,1);
+		DFEVar tempB_1 = chainB.addCounter(/*loopLengthVal*/16,1);
+
+		//debug.simPrintf("stepA = %d, loopA = %d, stepB = %d, loopB = %d, n = %d, m = %d\n", stepA, loopA, stepB, loopB, n, m);
+
+		DFEVar inputAddress = counterOne.getCount();
+
+		DFEVar adex_in = inputAddress < adex_params_size;
+		DFEVar stdp_in = inputAddress < stdp_params_size;
+		DFEVar readingInput = adex_in | stdp_in;
+		DFEVar adex_param_addr = inputAddress.cast(dfeUInt(adex_params_addrBits));
+		DFEVar stdp_param_addr = inputAddress.cast(dfeUInt(stdp_params_addrBits));
+
+		DFEVar adex_p_array = io.input("adex_params", double_type, adex_in);
+		DFEVar stdp_p_array = io.input("stdp_params", double_type, stdp_in);
+
+		// Saving adex parameters in FMEM
+		Memory<DFEVar> adex_params = mem.alloc(dfeFloat(11,53), adex_params_size);
+		adex_params.write(adex_param_addr, adex_p_array, adex_in);
+
+		// Saving stdp parameters in FMEM
+		Memory<DFEVar> stdp_params = mem.alloc(dfeFloat(11,53), stdp_params_size);
+		stdp_params.write(stdp_param_addr, stdp_p_array, stdp_in);
+
+		DFEVar adex_add = constant.var(1).cast(dfeUInt(adex_params_addrBits));
+		DFEVar gL = adex_params.read(adex_add);
+		adex_add = constant.var(3).cast(dfeUInt(adex_params_addrBits));
+		DFEVar EL = adex_params.read(adex_add);
+		adex_add = constant.var(4).cast(dfeUInt(adex_params_addrBits));
+		DFEVar DeltaT = adex_params.read(adex_add);
+		adex_add = constant.var(0).cast(dfeUInt(adex_params_addrBits));
+		DFEVar C = adex_params.read(adex_add);
+		adex_add = constant.var(6).cast(dfeUInt(adex_params_addrBits));
+		DFEVar vtrest = adex_params.read(adex_add);
+		adex_add = constant.var(8).cast(dfeUInt(adex_params_addrBits));
+		DFEVar tauvt = adex_params.read(adex_add);
+		adex_add = constant.var(10).cast(dfeUInt(adex_params_addrBits));
+		DFEVar c = adex_params.read(adex_add);
+		adex_add = constant.var(9).cast(dfeUInt(adex_params_addrBits));
+		DFEVar tauw = adex_params.read(adex_add);
+		adex_add = constant.var(12).cast(dfeUInt(adex_params_addrBits));
+		DFEVar Vr = adex_params.read(adex_add);
+		adex_add = constant.var(11).cast(dfeUInt(adex_params_addrBits));
+		DFEVar b = adex_params.read(adex_add);
+		adex_add = constant.var(7).cast(dfeUInt(adex_params_addrBits));
+		DFEVar vtmax = adex_params.read(adex_add);
+		adex_add = constant.var(13).cast(dfeUInt(adex_params_addrBits));
+		DFEVar defaultclock_dt = adex_params.read(adex_add);
+
+
+		DFEVar stdp_add = constant.var(21).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar tau_FFp = stdp_params.read(stdp_add);
+		stdp_add = constant.var(17).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar tau_FBn = stdp_params.read(stdp_add);
+		stdp_add = constant.var(14).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar tau_u = stdp_params.read(stdp_add);
+		stdp_add = constant.var(19).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar tau_FBp = stdp_params.read(stdp_add);
+		stdp_add = constant.var(15).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar tau_r = stdp_params.read(stdp_add);
+		stdp_add = constant.var(4).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar s = stdp_params.read(stdp_add);
+		stdp_add = constant.var(23).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar etaA = stdp_params.read(stdp_add);
+		stdp_add = constant.var(22).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar etaU = stdp_params.read(stdp_add);
+		stdp_add = constant.var(20).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar AFFp = stdp_params.read(stdp_add);
+		stdp_add = constant.var(16).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar AFBn = stdp_params.read(stdp_add);
+		stdp_add = constant.var(18).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar AFBp = stdp_params.read(stdp_add);
+		stdp_add = constant.var(9).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar Umin = stdp_params.read(stdp_add);
+		stdp_add = constant.var(8).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar Umax = stdp_params.read(stdp_add);
+		stdp_add = constant.var(6).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar Amin = stdp_params.read(stdp_add);
+		stdp_add = constant.var(5).cast(dfeUInt(stdp_params_addrBits));
+		DFEVar Amax = stdp_params.read(stdp_add);
+
+		DFEVar t = stepA.cast(double_type) * defaultclock_dt;
+
+		DFEVar A_control = ~readingInput & (wordCountA === 0 & tempA_1 === 0 & tempA_2 === 0);
+		//DFEVar burstCount_A = loopA === 0 ? burstCountA : burstCountA_2;
+		DFEVar burstCount_A = burstCountA;
+		LMemCommandStream.makeKernelOutput("XcmdStream",
+				A_control,                 // control
+				burstCount_A,                      // address (burstCount*burstSize)
+				constant.var(dfeUInt(8), 1),      // size	(number of bursts per read)
+				constant.var(dfeUInt(1), 0),      // inc	(inc in bursts of address)
+				constant.var(dfeUInt(1), 0),      // stream
+				constant.var(false));
+
+		DFEVar A_control_out = ~readingInput & (wordCountA === 0 & tempA_1 === 0 & tempA_2 === 0 & loopA === 0);
+		//DFEVar burstCount_A = loopA === 0 ? burstCountA : burstCountA_2;
+		DFEVar burstCount_A_out = burstCountA;
+		LMemCommandStream.makeKernelOutput("XOutcmdStream",
+				A_control_out,                 // control
+				burstCount_A_out,                      // address (burstCount*burstSize)
+				constant.var(dfeUInt(8), 1),      // size	(number of bursts per read)
+				constant.var(dfeUInt(1), 0),      // inc	(inc in bursts of address)
+				constant.var(dfeUInt(1), 0),      // stream
+				/*constant.var(false)*/loopA === 0 & burstCount_A_out === (totalBurstsX - 1) & stepA === steps-1);
+
+
+		DFEVector<DFEVar> x = io.input("X", vectorVars, ~readingInput & tempA_1 === 0 & tempA_2 === 0);
+		// Initializing the variables in fmem and reading the updated values in each timestep
+		DFEVar vt = x[0];
+		DFEVar vm = x[1];
+		DFEVar I = x[2];
+		DFEVar x_var = x[3];
+		DFEVar Spike = x[4];
+		// Calculations
+		DFEVar _vm, _vt, _x;
+		_vm = (gL*(EL-vm)+gL*DeltaT*KernelMath.exp((vm-vt)/DeltaT)+I-x_var)/C;
+		_vt = -(vt-vtrest)/tauvt;
+		//vtrest.simWatch("vtrest");
+		//tauvt.simWatch("tauvt");
+		_vt.simWatch("vt_c");
+		_x = (c*(vm-EL)-x_var)/tauw;
+		DFEVar vm_o = vm + _vm * defaultclock_dt;
+        DFEVar vt_o = vt + _vt * defaultclock_dt;
+        DFEVar x_o = x_var + _x * defaultclock_dt;
+        DFEVar I_o = I;	// I must be read from memory in every timestep
+        DFEVar Spike_o = Spike;
+
+        DFEVar control = vm_o > vt;
+        control.simWatch("control");
+
+        vm_o = control ? Vr : vm_o;
+        x_o = control ? x_o + b : x_o;
+        vt_o = control ? vtmax : vt_o;
+		Spike_o = control ? constant.var(1).cast(double_type) : constant.var(0).cast(double_type);
+		DFEVector<DFEVar> x_o_arr = vectorVars.newInstance(this);
+
+		x_o_arr[0] <== vt_o;
+		x_o_arr[1] <== vm_o;
+		x_o_arr[2] <== I_o;
+		x_o_arr[3] <== x_o;
+		x_o_arr[4] <== Spike_o;
+		x_o_arr[5] <== Spike_o;
+
+
+		DFEVar x_control_out = ~readingInput & loopA === 0 & tempA_1 === 0 & tempA_2 === 1;
+		io.output("XOut", x_o_arr, vectorVars, x_control_out);
+	}
+
+}

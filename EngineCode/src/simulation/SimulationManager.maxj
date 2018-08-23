@@ -1,0 +1,147 @@
+package simulation;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemCommandGroup;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+public class SimulationManager extends CustomManager{
+
+	private static final String s_kernelName = "SimulationKernel";
+	private static final String s_cmdstrmkernelName = "SimulationCmdStreamsKernel";
+
+	SimulationManager(EngineParameters engineParameters) {
+		super(engineParameters);
+		KernelBlock k = addKernel(new SimulationKernel(makeKernelParameters(s_kernelName)));
+		debug.setDebugLevel(new DebugLevel(){{setHasStreamStatus(true);}});
+		DFELink fromcpu = addStreamFromCPU("fromcpu");
+		DFELink tocpu = addStreamToCPU("tocpu");
+
+		DFELink adex_par = addStreamFromCPU("adex_params");
+		DFELink stdp_par = addStreamFromCPU("stdp_params");
+		k.getInput("adex_params") <== adex_par;
+		k.getInput("stdp_params") <== stdp_par;
+
+		LMemInterface iface = addLMemInterface();
+		DFELink tolmem = iface.addStreamToLMem("tolmem",LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+		DFELink fromlmem = iface.addStreamFromLMem("fromlmem",LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+
+		tolmem <== fromcpu;
+		tocpu <== fromlmem;
+
+		//DFELink SynIn = iface.addStreamFromLMem("SynIn",k.getOutput("SynIncmdStream"));
+		DFELink X = iface.addStreamFromLMem("X",k.getOutput("XcmdStream"));
+
+		//k.getInput("SynIn") <== SynIn;
+		k.getInput("X") <== X;
+
+		DFELink XOut = iface.addStreamToLMem("XOut",k.getOutput("XOutcmdStream"));
+		XOut <== k.getOutput("XOut");
+		//DFELink SynOut = iface.addStreamToLMem("SynOut",k.getOutput("SynOutcmdStream"));
+		//SynOut <== k.getOutput("SynOut");
+	}
+	private static EngineInterface interfaceWrite(String name) {
+		EngineInterface ei = new EngineInterface(name);
+
+		InterfaceParam size  = ei.addParam("size", CPUTypes.INT);
+		InterfaceParam start = ei.addParam("start", CPUTypes.INT);
+		InterfaceParam sizeInBytes = size * CPUTypes.DOUBLE.sizeInBytes();
+
+		ei.setStream("fromcpu", CPUTypes.DOUBLE, sizeInBytes );
+		ei.setLMemLinear("tolmem", start * CPUTypes.DOUBLE.sizeInBytes(), sizeInBytes);
+		ei.ignoreAll(Direction.IN_OUT);
+		return ei;
+	}
+
+	// reads the data back to the CPU from the LMem
+	private static EngineInterface interfaceRead(String name) {
+		EngineInterface ei = new EngineInterface(name);
+
+		InterfaceParam size  = ei.addParam("size", CPUTypes.INT);
+		InterfaceParam start = ei.addParam("start", CPUTypes.INT);
+		InterfaceParam sizeInBytes = size * CPUTypes.DOUBLE.sizeInBytes();
+
+		ei.setLMemLinear("fromlmem", start * CPUTypes.DOUBLE.sizeInBytes(), sizeInBytes);
+		ei.setStream("tocpu", CPUTypes.DOUBLE, sizeInBytes);
+		ei.ignoreAll(Direction.IN_OUT);
+		return ei;
+	}
+
+	private static EngineInterface interfaceDefault() {
+		EngineInterface engine_interface = new EngineInterface();
+		CPUTypes   double_type = CPUTypes.DOUBLE;
+		int        double_size = double_type.sizeInBytes();
+
+		CPUTypes   int_type = CPUTypes.INT;
+		int        int_size = int_type.sizeInBytes();
+
+		int loop2Length = 4;	// Same with kernel
+
+		InterfaceParam  N_adex = engine_interface.addParam("N_adex", CPUTypes.INT); //number of adex params
+		InterfaceParam  N_stdp = engine_interface.addParam("N_stdp", CPUTypes.INT); //number of stdp params
+		InterfaceParam  N    = engine_interface.addParam("N", CPUTypes.UINT32); //inputs
+		InterfaceParam  M_S    = engine_interface.addParam("M_S", CPUTypes.UINT32); //adex neurons source
+		InterfaceParam  M_T    = engine_interface.addParam("M_T", CPUTypes.UINT32); //adex neurons target
+		InterfaceParam  steps   = engine_interface.addParam("Steps", CPUTypes.UINT32);
+		InterfaceParam  zero = engine_interface.addConstant(0l);
+		InterfaceParam  one = engine_interface.addConstant(1l);
+
+		InterfaceParam  burstSize = engine_interface.addParam("burstSize", int_type);
+
+		engine_interface.setScalar(s_kernelName, "totalBurstsSyn", (12*(M_T*(M_S+N))*(double_size))/burstSize);
+		engine_interface.setScalar(s_kernelName, "wordsPerBurstSyn", burstSize/(double_size*12));
+		engine_interface.setScalar(s_kernelName, "totalBurstsX", M_T*6*double_size/burstSize);
+		engine_interface.setScalar(s_kernelName, "wordsPerBurstX", burstSize/(double_size*6));
+
+		InterfaceParam loopLength = engine_interface.getAutoLoopOffset(s_kernelName, "loopLength");
+		engine_interface.ignoreAutoLoopOffset(s_kernelName, "loopLength");
+
+		engine_interface.setTicks(s_kernelName, N_stdp + /*loopLength*/16*(N+M_S)*M_T*3*steps /*+ loop2Length*(N+M_S)*M_T*/);
+
+		engine_interface.setScalar(s_kernelName, "N", N);
+		engine_interface.setScalar(s_kernelName, "M_S", M_S);
+		engine_interface.setScalar(s_kernelName, "M_T", M_T);
+		engine_interface.setScalar(s_kernelName, "Steps", steps);
+		//engine_interface.setLMemLinear("x", zero, M_T * 6 * double_size);
+		//InterfaceParam adjacency_matrix_size = (M_S + N) * M_T * 12 * double_size;
+		//engine_interface.setLMemLinear("syn", M_T * 6 * double_size, adjacency_matrix_size);
+		//engine_interface.setLMemLinear("syn_o", M_T * 6 * double_size, adjacency_matrix_size);
+		engine_interface.setStream("adex_params", CPUTypes.DOUBLE,N_adex * CPUTypes.DOUBLE.sizeInBytes());
+		engine_interface.setStream("stdp_params", CPUTypes.DOUBLE,N_stdp * CPUTypes.DOUBLE.sizeInBytes());
+
+		////engine_interface.setLMemInterruptOn("SynOut");
+		//
+		engine_interface.ignoreAll(Direction.IN_OUT);
+		engine_interface.setLMemInterruptOn("XOut");
+		return engine_interface;
+	}
+
+	private static void configBuild(CustomManager manager, SimulationEngineParameters params) {
+		//manager.setEnableStreamStatusBlocks(false);
+		BuildConfig buildConfig = manager.getBuildConfig();
+		buildConfig.setMPPRCostTableSearchRange(params.getMPPRStart(), params.getMPPREnd());
+
+		buildConfig.setMPPRParallelism(params.getMPPRNumThreads());
+		buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
+	}
+
+	public static void main(String[] args) {
+		SimulationEngineParameters params = new SimulationEngineParameters(args);
+		CustomManager m = new SimulationManager(params);
+
+		m.createSLiCinterface(interfaceDefault());
+		//debug.dfePrintf(true, "setMPPRParallelism = %d\n",params.getMPPRThreads());
+		configBuild(m, params);
+		m.createSLiCinterface(interfaceRead("readLMem"));
+		m.createSLiCinterface(interfaceWrite("writeLMem"));
+		m.build();
+	}
+}
