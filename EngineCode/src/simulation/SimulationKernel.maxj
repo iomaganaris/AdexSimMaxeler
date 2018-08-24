@@ -181,11 +181,31 @@ class SimulationKernel extends Kernel {
 				constant.var(dfeUInt(8), 1),      // size	(number of bursts per read)
 				constant.var(dfeUInt(1), 0),      // inc	(inc in bursts of address)
 				constant.var(dfeUInt(1), 0),      // stream
-				/*constant.var(false)*/loopA === 0 & burstCount_A_out === (totalBurstsX - 1) & stepA === steps-1);
+				constant.var(false)/*loopA === 0 & burstCount_A_out === (totalBurstsX - 1) & stepA === steps-1*/);
 
+		DFEVar B_control = ~readingInput & (wordCountB === 0 & tempB_1 === 0 & loopB !== 0);
+		DFEVar burstCount_B = burstCountB;
+		LMemCommandStream.makeKernelOutput("SynIncmdStream",
+				B_control,                 // control
+				totalBurstsX + burstCount_B,        // address
+				constant.var(dfeUInt(8), 1),      // size
+				constant.var(dfeUInt(1), 0),      // inc
+				constant.var(dfeUInt(1), 0),      // stream
+				constant.var(false));
 
+		DFEVar B_control_o = ~readingInput & (wordCountB === 0 & tempB_1 === 0 & loopB !== 0);
+		LMemCommandStream.makeKernelOutput("SynOutcmdStream",
+				B_control_o,                  // control
+				totalBurstsX + burstCount_B,     // address
+				constant.var(dfeUInt(8), 1),       // size
+				constant.var(dfeUInt(1), 0),       // inc
+				constant.var(dfeUInt(1), 0),       // stream
+				loopB === 2 & burstCount_B === (totalBurstsSyn - 1) & stepB === steps-1);
+
+		DFEVector<DFEVar> syn = io.input("SynIn", SynapsesVector, ~readingInput & (loopB !== 0 & tempB_1 === 0));
 		DFEVector<DFEVar> x = io.input("X", vectorVars, ~readingInput & tempA_1 === 0 & tempA_2 === 0);
-		// Initializing the variables in fmem and reading the updated values in each timestep
+
+		// **************** SOLVE NEURONS START **************** //
 		DFEVar vt = x[0];
 		DFEVar vm = x[1];
 		DFEVar I = x[2];
@@ -212,6 +232,8 @@ class SimulationKernel extends Kernel {
         x_o = control ? x_o + b : x_o;
         vt_o = control ? vtmax : vt_o;
 		Spike_o = control ? constant.var(1).cast(double_type) : constant.var(0).cast(double_type);
+
+
 		DFEVector<DFEVar> x_o_arr = vectorVars.newInstance(this);
 
 		x_o_arr[0] <== vt_o;
@@ -221,9 +243,31 @@ class SimulationKernel extends Kernel {
 		x_o_arr[4] <== Spike_o;
 		x_o_arr[5] <== Spike_o;
 
+		x_o_arr.simWatch("x_o_arr");
+		// ************* SOLVE NEURONS END ****************** //
+
+		// ********** UPDATE SYNAPSES PRE START ************* //
+		DFEVar InputSpike = io.input("InputSpikes", dfeInt(32), ~readingInput /*& step === 0*/ & loopA === 1 & n >= M_S & m === 0 & tempA_1 === 0 & tempA_2 === 0);
+		// Saving Input Spikes in FMEM
+		int max_N = 1000;
+		int max_N_bits = MathUtils.bitsToAddress(max_N);
+
+		DFEVar InputSpikeAddr = n.cast(dfeUInt(max_N_bits));
+		Memory<DFEVar> InputSpikes = mem.alloc(type, max_N);
+		InputSpikes.write(InputSpikeAddr, InputSpike, m === 0 & loopA === 1);
+
+		DFEVar spike = (m === 0) ? InputSpike : InputSpikes.read(InputSpikeAddr);
+
+		DFEVector<DFEVar> SourceNeuron = io.input("SourceNeurons", vectorVars, ~readingInput /*& step === 0*/ & loopA === 1 & tempA_1 === 0 & tempA_2 === 0 & n < M_S);
+		SourceNeuron.simWatch("sourceneuron");
+
+		DFEVector<DFEVar> syn_o = syn;
 
 		DFEVar x_control_out = ~readingInput & loopA === 0 & tempA_1 === 0 & tempA_2 === 1;
 		io.output("XOut", x_o_arr, vectorVars, x_control_out);
+
+		DFEVar syn_o_control = ~readingInput & (tempB_1 === 15/*loopLengthVal-1*/ & loopB !== 0);
+		io.output("SynOut", syn_o, SynapsesVector, syn_o_control);
 	}
 
 }

@@ -37,16 +37,19 @@ public class SimulationManager extends CustomManager{
 		tolmem <== fromcpu;
 		tocpu <== fromlmem;
 
-		//DFELink SynIn = iface.addStreamFromLMem("SynIn",k.getOutput("SynIncmdStream"));
+		DFELink SynIn = iface.addStreamFromLMem("SynIn",k.getOutput("SynIncmdStream"));
 		DFELink X = iface.addStreamFromLMem("X",k.getOutput("XcmdStream"));
-
-		//k.getInput("SynIn") <== SynIn;
+		DFELink InputSpikes = iface.addStreamFromLMem("InputSpikes",LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+		DFELink SourceNeurons = iface.addStreamFromLMem("SourceNeurons",LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+		k.getInput("SynIn") <== SynIn;
 		k.getInput("X") <== X;
+		k.getInput("InputSpikes") <== InputSpikes;
+		k.getInput("SourceNeurons") <== SourceNeurons;
 
 		DFELink XOut = iface.addStreamToLMem("XOut",k.getOutput("XOutcmdStream"));
 		XOut <== k.getOutput("XOut");
-		//DFELink SynOut = iface.addStreamToLMem("SynOut",k.getOutput("SynOutcmdStream"));
-		//SynOut <== k.getOutput("SynOut");
+		DFELink SynOut = iface.addStreamToLMem("SynOut",k.getOutput("SynOutcmdStream"));
+		SynOut <== k.getOutput("SynOut");
 	}
 	private static EngineInterface interfaceWrite(String name) {
 		EngineInterface ei = new EngineInterface(name);
@@ -116,11 +119,14 @@ public class SimulationManager extends CustomManager{
 		//engine_interface.setLMemLinear("syn_o", M_T * 6 * double_size, adjacency_matrix_size);
 		engine_interface.setStream("adex_params", CPUTypes.DOUBLE,N_adex * CPUTypes.DOUBLE.sizeInBytes());
 		engine_interface.setStream("stdp_params", CPUTypes.DOUBLE,N_stdp * CPUTypes.DOUBLE.sizeInBytes());
-
+		InterfaceParam adjacency_matrix_size = (M_S + N) * M_T * 12 * double_size;
+		engine_interface.setLMemLinear("InputSpikes", M_T * 6 * double_size + adjacency_matrix_size,  N * CPUTypes.INT.sizeInBytes());
+		engine_interface.setLMemLinearWrapped("SourceNeurons", zero, M_S * 6 * double_size, M_T * M_S * 6 * double_size, zero);
 		////engine_interface.setLMemInterruptOn("SynOut");
 		//
 		engine_interface.ignoreAll(Direction.IN_OUT);
-		engine_interface.setLMemInterruptOn("XOut");
+		//engine_interface.setLMemInterruptOn("XOut");
+		engine_interface.setLMemInterruptOn("SynOut");
 		return engine_interface;
 	}
 

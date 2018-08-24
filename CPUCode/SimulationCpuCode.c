@@ -151,8 +151,8 @@ int main(void)
 	uint32_t M = 384;
 	uint32_t steps = 3;
 
-	uint32_t N_S = N;//100;
-	uint32_t N_Group_S = 0;
+	uint32_t N_S = 0;//100;
+	uint32_t N_Group_S = M;
 	uint32_t N_Group_T = M;
 
 	double input1_pos = 25;
@@ -332,8 +332,9 @@ int main(void)
 		}
 	}
 	// Initialization of Input Neurons Spikes
-	int InputSpikes_size = N_S * steps * sizeof(int);
-	int* InputSpikes = malloc(InputSpikes_size);
+	int InputSpikes_size = N_S * steps;
+	int InputSpikes_size_bytes = InputSpikes_size * sizeof(int);
+	int* InputSpikes = malloc(InputSpikes_size_bytes);
 	for(int i = 0; i < steps; i++){
 		for(int j = 0; j < N_S; j++){
 			InputSpikes[i*N_S+j] = 1;
@@ -346,6 +347,7 @@ int main(void)
 	printf("Writing to LMem.\n");
 	Simulation_writeLMem(size_d, 0, x);
 	Simulation_writeLMem(syn_size, size_d, syn);
+	Simulation_writeLMem(InputSpikes_size, size_d + syn_size, InputSpikes);
 	//UpdateSynapses_post_writeLMem(InputSpikes_size/sizeof(int), sizeBytes_d_var/sizeof(double) + syn_size/sizeof(double), InputSpikes);
 
 	/*UpdateNeurons_writeLMem(0, sizeBytes_d, vm);
@@ -367,7 +369,7 @@ int main(void)
 	//UpdateNeurons(scalar, M, N, M, adex_param_size, stdp_param_size, steps, adex_params, stdp_params, y ,s);
 	t0 = getTimestamp();
 	//printf("loopLength = %d",UpdateSynapses_post_get_UpdateSynapses_postKernel_loopLength());
-	Simulation(N_Group_S, N_Group_T, N, adex_param_size, stdp_param_size, steps, BurstLengthInBytes, adex_params, stdp_params);
+	Simulation(N_Group_S, N_Group_T, N_S, adex_param_size, stdp_param_size, steps, BurstLengthInBytes, adex_params, stdp_params);
 	t1 = getTimestamp();
 	printf("DFE Runtime = %9.7f seconds\n", (t1-t0)/1000000.0 );
 	fflush(stdout);
