@@ -65,6 +65,8 @@ class SimulationKernel extends Kernel {
 		CounterChain chainA = control.count.makeCounterChain(counterOne.getCount()>31);
 		DFEVar stepA = chainA.addCounter(steps,1);
 		DFEVar loopA = chainA.addCounter(3,1);
+		stepA.simWatch("stepA");
+		loopA.simWatch("loopA");
 		DFEVar burstCountA = chainA.addCounter(totalBurstsX,1);
 		DFEVar wordCountA = chainA.addCounter(wordsPerBurstX,1);
 		DFEVar tempA_1_max = M_S+N;
@@ -81,6 +83,10 @@ class SimulationKernel extends Kernel {
 		DFEVar wordCountB = chainB.addCounter(wordsPerBurstSyn,1);
 		DFEVar tempB_1 = chainB.addCounter(/*loopLengthVal*/16,1);
 
+		CounterChain chainSN = control.count.makeCounterChain(counterOne.getCount()>31 & loopA === 1 & n < M_S);
+		DFEVar burstCountSN = chainSN.addCounter(totalBurstsX,1);
+		DFEVar wordCountSN = chainSN.addCounter(wordsPerBurstX,1);
+		DFEVar tempSN = chainSN.addCounter(16,1);
 		//debug.simPrintf("stepA = %d, loopA = %d, stepB = %d, loopB = %d, n = %d, m = %d\n", stepA, loopA, stepB, loopB, n, m);
 
 		DFEVar inputAddress = counterOne.getCount();
@@ -202,6 +208,17 @@ class SimulationKernel extends Kernel {
 				constant.var(dfeUInt(1), 0),       // stream
 				loopB === 2 & burstCount_B === (totalBurstsSyn - 1) & stepB === steps-1);
 
+		DFEVar SN_control = ~readingInput & (wordCountSN === 0 & tempSN === 0 & loopA === 1 & n < M_S);
+		//DFEVar burstCount_A = loopA === 0 ? burstCountA : burstCountA_2;
+		DFEVar burstCount_SN = burstCountSN;
+		LMemCommandStream.makeKernelOutput("SNcmdStream",
+				SN_control,                 // control
+				burstCount_SN,                      // address (burstCount*burstSize)
+				constant.var(dfeUInt(8), 1),      // size	(number of bursts per read)
+				constant.var(dfeUInt(1), 0),      // inc	(inc in bursts of address)
+				constant.var(dfeUInt(1), 0),      // stream
+				constant.var(false));
+
 		DFEVector<DFEVar> syn = io.input("SynIn", SynapsesVector, ~readingInput & (loopB !== 0 & tempB_1 === 0));
 		DFEVector<DFEVar> x = io.input("X", vectorVars, ~readingInput & tempA_1 === 0 & tempA_2 === 0);
 
@@ -217,7 +234,7 @@ class SimulationKernel extends Kernel {
 		_vt = -(vt-vtrest)/tauvt;
 		//vtrest.simWatch("vtrest");
 		//tauvt.simWatch("tauvt");
-		_vt.simWatch("vt_c");
+		//_vt.simWatch("vt_c");
 		_x = (c*(vm-EL)-x_var)/tauw;
 		DFEVar vm_o = vm + _vm * defaultclock_dt;
         DFEVar vt_o = vt + _vt * defaultclock_dt;
@@ -226,7 +243,7 @@ class SimulationKernel extends Kernel {
         DFEVar Spike_o = Spike;
 
         DFEVar control = vm_o > vt;
-        control.simWatch("control");
+        //control.simWatch("control");
 
         vm_o = control ? Vr : vm_o;
         x_o = control ? x_o + b : x_o;
@@ -258,7 +275,7 @@ class SimulationKernel extends Kernel {
 
 		DFEVar spike = (m === 0) ? InputSpike : InputSpikes.read(InputSpikeAddr);
 
-		DFEVector<DFEVar> SourceNeuron = io.input("SourceNeurons", vectorVars, ~readingInput /*& step === 0*/ & loopA === 1 & tempA_1 === 0 & tempA_2 === 0 & n < M_S);
+		DFEVector<DFEVar> SourceNeuron = io.input("SourceNeurons", vectorVars, ~readingInput /*& step === 0*/ & loopA === 1 & tempSN === 0 & n < M_S);
 		SourceNeuron.simWatch("sourceneuron");
 
 		DFEVector<DFEVar> syn_o = syn;
