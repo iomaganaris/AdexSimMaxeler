@@ -334,12 +334,91 @@ class SimulationKernel extends Kernel {
 		syn_o_p[11] <== syn[11];
 		// ********** UPDATE SYNAPSES PRE END ************** //
 
+		// ********** UPDATE SYNAPSES POST START *********** //
+
+		// loop = 0 calculations
+		DFEVar FFp_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[2] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FFp) : syn_o_p[2];
+		DFEVar FBn_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[4] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FBn) : syn_o_p[4];
+		DFEVar u_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[7] + (-syn_o_p[7] + syn_o_p[6]) * KernelMath.exp(-(-syn_o_p[9] + t)/tau_u) : syn_o_p[6];
+//		u.cast(double_type).simWatch("u");
+		DFEVar FBp_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[3] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FBp) : syn_o_p[3];
+		DFEVar R_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? (syn_o_p[5] - 1) * KernelMath.exp(-(-syn_o_p[9] + t)/tau_r) + 1 : syn_o_p[5];
+		DFEVar A_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[8] + etaA * (AFFp * FFp * FBn) : syn_o_p[8];
+		// loop = 0 calculations finish
+
+		DFEVector<DFEVar> syn_o_po = SynapsesVector.newInstance(this);
+		syn_o_po[0] <== syn[0];
+		syn_o_po[1] <== w;
+		syn_o_po[2] <== FFp_po;
+		syn_o_po[3] <== FBp;
+		syn_o_po[4] <== FBn_po;
+		syn_o_po[5] <== R_po;
+		syn_o_po[6] <== u_po;
+		syn_o_po[7] <== U;
+		syn_o_po[8] <== A_po;
+		syn_o_po[9] <== lastupdate;
+		syn_o_po[10] <== targetI;
+		syn_o_po[11] <== syn[11];
+
+		// Mean calculation part
+		DFEVar carriedSum = double_type.newInstance(this);
+		DFEVar carriedNum = double_type.newInstance(this);
+
+		DFEVar sum_t = m === 0 & n === 0 & loopA === 1 ? constant.var(0) : carriedSum;
+		DFEVar num_t = m === 0 & n === 0 & loopA === 1 ? constant.var(0) : carriedNum;
+
+		sum_t = x[4] === 1 & syn[0] === 1 & loopA === 1 ? sum_t + AFFp * FFp * FBn : sum_t;
+		num_t = x[4] === 1 & syn[0] === 1 & loopA === 1 ? num_t + 1 : num_t;
+		carriedSum <== stream.offset(sum_t, -16/*loopLength*/);
+		carriedNum <== stream.offset(num_t, -16/*loopLength*/);
+		DFEVar mean_t = sum_t/num_t;
+		DFEVar mean_fin = loopA === 2 ? mean_t : constant.var(0);
+//		mean_fin.simWatch("mean_fin");
+		// Mean calculation part finish
+
+		// loop = 1 calculations
+		DFEVar temp = etaA * 0.5 * mean_fin;
+		DFEVar A_po_1 = x[4] === 1 & syn[0] === 1 & loopA === 2 ? syn[8] - temp : syn[8];
+		//A_1.simWatch("A_1");
+		DFEVar A_po_t = A_po_1 < Amin & x[4] === 1 & syn[0] === 1 & loopA === 2 ? Amin : A_po_1;
+		//A_t.simWatch("A_t");
+		DFEVar A_po_tt = A_po_t > Amax & x[4] === 1 & syn[0] === 1 & loopA === 2 ? Amax : A_po_t;
+		//A_tt.simWatch("A_tt");
+		DFEVar w_po =  x[4] === 1 & syn[0] === 1 & loopA === 2 ? syn[7] * A_po_tt : syn[1];
+		DFEVar FBp_po_1 =  x[4] === 1 & syn[0] === 1 & loopA === 2 ? syn[3] + 1 : syn[3];
+		DFEVar FBn_po_1 =  x[4] === 1 & syn[0] === 1 & loopA === 2 ? syn[4] + 1 : syn[4];
+		DFEVar lastupdate_po = x[4] === 1 & syn[0] === 1 & loopA === 2 ? t : syn[9];
+		// loop = 1 calculations finish
+
+		// Connecting Output
+		DFEVar FBp_fin = loopA === 1 ? FBp_po : FBp_po_1;
+		DFEVar FBn_fin = loopA === 1 ? FBn_po : FBn_po_1;
+		DFEVar A_fin = loopA === 1 ? A_po : A_po_tt;
+//		A_fin.cast(double_type).simWatch("A_fin");
+		DFEVector<DFEVar> syn_o = SynapsesVector.newInstance(this);
+
+		syn_o[0] <== syn[0];
+		syn_o[1] <== w_po;
+		syn_o[2] <== syn[2];
+		syn_o[3] <== FBp_fin;
+		syn_o[4] <== FBn_fin;
+		syn_o[5] <== syn[5];
+		syn_o[6] <== syn[6];
+		//syn[6].simWatch("syn_6");
+		//syn_o[6].simWatch("syn_o_6");
+		syn_o[7] <== syn[7];
+		syn_o[8] <== A_fin;
+		syn_o[9] <== lastupdate;
+		syn_o[10] <== syn[10];
+		syn_o[11] <== syn[11];
+
+		// ********** UPDATE SYNAPSES POST END ************* //
 		DFEVector<DFEVar> x_out = loopA === 0 ? x_o_arr : x_out_p;
 		x_out[2].simWatch("x_out_I");
 		DFEVar x_control_out = ~readingInput & ((loopA === 0 & tempA_1 === 0) | (loopA === 1 & tempA_1 === tempA_1_max-1)) & tempA_2 === 15;
 		//x_control_out.simWatch("x_control_out");
 		io.output("XOut", x_out, vectorVars, x_control_out);
-		DFEVector<DFEVar> syn_out = loopB === 1 ? syn_o_p : syn;
+		DFEVector<DFEVar> syn_out = loopB === 1 ? syn_o_po : syn_o;
 		DFEVar syn_o_control = ~readingInput & (tempB_1 === 15/*loopLengthVal-1*/ & loopB.neq(0));
 		//syn_o_control.simWatch("syn_o_control");
 		io.output("SynOut", syn_out, SynapsesVector, syn_o_control);
