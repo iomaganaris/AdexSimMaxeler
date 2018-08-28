@@ -35,15 +35,22 @@ void print_neurons(double* x, int M){
 		printf("%lf\n",x[i]);
 	}
 }
-void print_synapses(double* syn, int N_S, int N_T){
-	/*printf("conn\n");
-	for(int i = 0; i < N_S*12; i+=12){
-		for(int j = 0; j < N_T; j++){
-			printf("%d, ", syn[j*12*N_S+i]);
+void print_synapses(double* syn, int N_S, int N_S_pad, int N_Group_S, int N_Group_S_pad, int N_Group_T, int N_Group_T_pad){
+	printf("conn\n");
+	for(int i = 0; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%d, ", (int)syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
 			//if((i*N_T+j+1)%4 == 0) printf("\n");
 		}
 		printf("\n");
-	}*/
+	}
+	for(int i = N_Group_S_pad*12; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%f, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
 	/*printf("test\n");
 	for(int i =0; i < N_S; i++){
 				for(int j = 3; j < N_T*12; j+=12){
@@ -60,87 +67,158 @@ void print_synapses(double* syn, int N_S, int N_T){
 		}
 		printf("\n");
 	}*/
-	/*printf("\nw\n");
-	for(int i = 1; i < N_S*12; i+=12){
-		for(int j = 0; j < N_T; j++){
-			printf("%.8e, ", syn[j*12*N_S+i]);
+	printf("\nw\n");
+	for(int i = 1; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
+	for(int i = N_Group_S_pad*12+1; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
 			//if((i*N_T+j+1)%4 == 0) printf("\n");
 		}
 		printf("\n");
 	}
 	printf("\nFFp\n");
-	for(int i = 2; i < N_S*12; i+=12){
-		for(int j = 0; j < N_T; j++){
-			printf("%.8e, ", syn[j*12*N_S+i]);
+	for(int i = 2; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
+	for(int i = N_Group_S_pad*12+2; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
 			//if((i*N_T+j+1)%4 == 0) printf("\n");
 		}
 		printf("\n");
 	}
 	printf("\nFBp\n");
-	for(int i = 3; i < N_S*12; i+=12){
-		for(int j = 0; j < N_T; j++){
-			printf("%.8e, ", syn[j*12*N_S+i]);
+	for(int i = 3; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
+	for(int i = N_Group_S_pad*12+3; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
 			//if((i*N_T+j+1)%4 == 0) printf("\n");
 		}
 		printf("\n");
 	}
 	printf("\nFBn\n");
-	for(int i = 4; i < N_S*12; i+=12){
-			for(int j = 0; j < N_T; j++){
-				printf("%.8e, ", syn[j*12*N_S+i]);
-				//if((i*N_T+j+1)%4 == 0) printf("\n");
-			}
-			printf("\n");
+	for(int i = 4; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
 		}
+		printf("\n");
+	}
+	for(int i = N_Group_S_pad*12+4; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
 	printf("\nR\n");
-	for(int i = 5; i < N_S*12; i+=12){
-			for(int j = 0; j < N_T; j++){
-				printf("%.8e, ", syn[j*12*N_S+i]);
-				//if((i*N_T+j+1)%4 == 0) printf("\n");
-			}
-			printf("\n");
-		}*/
+	for(int i = 5; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
+	for(int i = N_Group_S_pad*12+5; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
 	printf("\nu\n");
-	for(int i = 6; i < N_S*12; i+=12){
-			for(int j = 0; j < N_T; j++){
-				printf("%.8e, ", syn[j*12*N_S+i]);
-				//if((i*N_T+j+1)%4 == 0) printf("\n");
-			}
-			printf("\n");
+	for(int i = 6; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
 		}
-	/*printf("\nU\n");
-	for(int i = 7; i < N_S*12; i+=12){
-			for(int j = 0; j < N_T; j++){
-				printf("%.8e, ", syn[j*12*N_S+i]);
-				//if((i*N_T+j+1)%4 == 0) printf("\n");
-			}
-			printf("\n");
-		}*/
+		printf("\n");
+	}
+	for(int i = N_Group_S_pad*12+6; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
+	printf("\nU\n");
+	for(int i = 7; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
+	for(int i = N_Group_S_pad*12+7; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
 	printf("\nA\n");
-	for(int i = 8; i < N_S*12; i+=12){
-			for(int j = 0; j < N_T; j++){
-				printf("%.8e, ", syn[j*12*N_S+i]);
-				//if((i*N_T+j+1)%4 == 0) printf("\n");
-			}
-			printf("\n");
+	for(int i = 8; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
 		}
-	/*printf("\nlastupdate\n");
-	for(int i = 9; i < N_S*12; i+=12){
-			for(int j = 0; j < N_T; j++){
-				printf("%f, ", syn[j*12*N_S+i]);
-				//if((i*N_T+j+1)%4 == 0) printf("\n");
-			}
-			printf("\n");
+		printf("\n");
+	}
+	for(int i = N_Group_S_pad*12+8; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
 		}
+		printf("\n");
+	}
+	printf("\nlastupdate\n");
+	for(int i = 9; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%f, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
+	for(int i = N_Group_S_pad*12+9; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%f, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
 	printf("\ntarget_I\n");
-	for(int i = 10; i < N_S*12; i+=12){
-			for(int j = 0; j < N_T; j++){
-				printf("%.8e, ", syn[j*12*N_S+i]);
-				//if((i*N_T+j+1)%4 == 0) printf("\n");
-			}
-			printf("\n");
+	for(int i = 10; i < N_Group_S*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
 		}
-	printf("\n");*/
+		printf("\n");
+	}
+	for(int i = N_Group_S_pad*12+10; i < (N_Group_S_pad+N_S)*12; i+=12){
+		for(int j = 0; j < N_Group_T; j++){
+			printf("%.8e, ", syn[j*12*(N_Group_S_pad+N_S_pad)+i]);
+			//if((i*N_T+j+1)%4 == 0) printf("\n");
+		}
+		printf("\n");
+	}
+	printf("\n");
+	fflush(stdout);
 }
 
 int main(void)
@@ -151,8 +229,8 @@ int main(void)
 	uint32_t M = 384;
 	uint32_t steps = 3;
 
-	uint32_t N_S = 0;//100;
-	uint32_t N_Group_S = M;
+	uint32_t N_S = N;//100;
+	uint32_t N_Group_S = 0;
 	uint32_t N_Group_T = M;
 
 	double input1_pos = 25;
@@ -239,7 +317,7 @@ int main(void)
 		x[i+1] = adex_params[3];
 		x[i+2] = 0;//i;
 		x[i+3] = 0;
-		x[i+4] = 1;
+		x[i+4] = 0;
 	}
 
 	// Initialization of Synapses Variables
@@ -301,12 +379,18 @@ int main(void)
 			if (syn[i+j*(N_Group_S+N_S)*12]) {
 				//syn[i][j].conn = 1;	// all connected
 				//Connectivity, initialization now happens only in connected synapses.
-				syn[i+j*(N_Group_S+N_S)*12+2] = init_const;//0;
+				//syn[i+j*(N_Group_S+N_S)*12+2] = init_const;//0;
+				syn[i+j*(N_Group_S+N_S)*12+1] = 0;
+				syn[i+j*(N_Group_S+N_S)*12+2] = 0;
 				syn[i+j*(N_Group_S+N_S)*12+3] = init_const;//0;
 				syn[i+j*(N_Group_S+N_S)*12+4] = init_const;//0;
 				syn[i+j*(N_Group_S+N_S)*12+5] = init_const;//1;
+				syn[i+j*(N_Group_S+N_S)*12+6] = 0;
 				syn[i+j*(N_Group_S+N_S)*12+7] = init_const;//exp(-(((pow((init_const+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(stdp_params[8]-stdp_params[9])+stdp_params[9];	// takes time
 				syn[i+j*(N_Group_S+N_S)*12+8] = init_const;//exp(-(((pow((init_const+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(stdp_params[5]-stdp_params[6])+stdp_params[6];	// takes time
+				syn[i+j*(N_Group_S+N_S)*12+9] = 0;
+				syn[i+j*(N_Group_S+N_S)*12+10] = 0;
+				syn[i+j*(N_Group_S+N_S)*12+11] = 0;
 				init_const++;
 				//syn[i][j].U = exp(-(((pow(((i)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(Umax-Umin)+Umin;	// takes time
 				//syn[i][j].A = exp(-(((pow(((i)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(Amax-Amin)+Amin;	// takes time
@@ -319,14 +403,20 @@ int main(void)
 			if (syn[i+j*(N_Group_S+N_S)*12]) {
 				//Connectivity, initialization now happens only in connected synapses.
 				//syn[i][j].conn = 1;	// all connected
-				syn[i+j*(N_Group_S+N_S)*12+2] = init_const;//0;
+				//syn[i+j*(N_Group_S+N_S)*12+2] = init_const;//0;
+				syn[i+j*(N_Group_S+N_S)*12+1] = 0;
+				syn[i+j*(N_Group_S+N_S)*12+2] = 0;
 				syn[i+j*(N_Group_S+N_S)*12+3] = init_const;//0;//init_const;//0;
 				syn[i+j*(N_Group_S+N_S)*12+4] = init_const;//0;
 				syn[i+j*(N_Group_S+N_S)*12+5] = init_const;//1;
+				syn[i+j*(N_Group_S+N_S)*12+6] = 0;
 				//syn[i][j].U = exp(-(((pow((((i-N_Group_S)*N_Group_T/M+j)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(Umax-Umin)+Umin;	// takes time
 				//syn[i][j].A = exp(-(((pow((((i-N_Group_S)*N_Group_T/M+j)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(Amax-Amin)+Amin;	// takes time
 				syn[i+j*(N_Group_S+N_S)*12+7] = init_const;//exp(-(((pow(((init_const)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(stdp_params[8]-stdp_params[9])+stdp_params[9];	// takes time
 				syn[i+j*(N_Group_S+N_S)*12+8] = init_const;//exp(-(((pow(((init_const)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(stdp_params[5]-stdp_params[6])+stdp_params[6];	// takes time
+				syn[i+j*(N_Group_S+N_S)*12+9] = 0;
+				syn[i+j*(N_Group_S+N_S)*12+10] = 0;
+				syn[i+j*(N_Group_S+N_S)*12+11] = 0;
 				init_const++;
 			}
 		}
@@ -383,7 +473,7 @@ int main(void)
 
 	print_neurons(x, N_Group_T);
 	//print_synapses(syn, N_S+N_Group_S, N_Group_T);
-
+	print_synapses(syn,N_S, N_S, N_Group_S, N_Group_S, N_Group_T, N_Group_T);
 	// TODO Use result data
 	/*for(int i=0; i<size; ++i)
 		if (s[i] != x[i] + y[i] + scalar)

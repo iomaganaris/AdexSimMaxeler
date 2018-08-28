@@ -120,13 +120,14 @@ public class SimulationManager extends CustomManager{
 		engine_interface.setStream("adex_params", CPUTypes.DOUBLE,N_adex * CPUTypes.DOUBLE.sizeInBytes());
 		engine_interface.setStream("stdp_params", CPUTypes.DOUBLE,N_stdp * CPUTypes.DOUBLE.sizeInBytes());
 		InterfaceParam adjacency_matrix_size = (M_S + N) * M_T * 12 * double_size;
-		engine_interface.setLMemLinear("InputSpikes", M_T * 6 * double_size + adjacency_matrix_size,  N * CPUTypes.INT.sizeInBytes());
+		engine_interface.setLMemLinear("InputSpikes", M_T * 6 * double_size + adjacency_matrix_size,  N * steps * CPUTypes.INT.sizeInBytes());
 		//engine_interface.setLMemLinearWrapped("SourceNeurons", zero, M_S * 6 * double_size, M_T * M_S * 6 * double_size, zero);
 		////engine_interface.setLMemInterruptOn("SynOut");
 		//
-		engine_interface.ignoreAll(Direction.IN_OUT);
 		//engine_interface.setLMemInterruptOn("XOut");
 		engine_interface.setLMemInterruptOn("SynOut");
+		engine_interface.ignoreAll(Direction.IN_OUT);
+
 		return engine_interface;
 	}
 
