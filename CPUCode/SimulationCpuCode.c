@@ -4,6 +4,71 @@
 
 #include "Maxfiles.h"
 #include "MaxSLiCInterface.h"
+
+#define NxM
+//#define MxM
+//#define NxMxM	//not working probably
+#define allconnected
+
+double defaultclock_dt = 1*1e-3;	//ms
+
+//double taum_S = 10 * 1e-3; //ms
+double Ee = 0 * 1e-3; //mV
+double taue = 2 * 1e-3; //ms
+double Fon = 50; //Hz
+double Foff = 3; //Hz
+
+#ifdef NxM
+	double s = 100 * 1e-10;//100*1e-10;
+#endif
+#ifdef MxM
+	double s = 500000;	//for testing
+#endif
+double Amax = 2.0;
+double Amin = 0;
+double Ainit = 0.1;
+double Umax = 1.0;
+double Umin = 0;
+double Uinit = 0.1;
+
+double dFBn = 0;
+double dFBp = 0;
+double dFFp = 0;
+
+//#Short-term plasticity params
+double tau_u = 50 * 1e-3;	//ms
+double tau_r = 200 * 1e-3;	//ms
+
+//#prepostSTDP params: AFBn tau_FBn AFBp tau_FBp AFFp tau_FFp
+//double params[6] = {0.1771,    0.0327,    0.1548,    0.2302,    0.0618,    0.0666};
+double AFBn = 0.1771;
+double tau_FBn = 0.0327 * 1e3 * 1e-3;	//ms
+double AFBp = 0.1548;
+double tau_FBp = 0.2302 * 1e3 * 1e-3;	//ms
+double AFFp = 0.0618;
+double tau_FFp = 0.0666 * 1e3 * 1e-3;	//ms
+//#etaU = 0.35
+double etaU = 0.15;
+double etaA = 0.15;
+//#etaA = 0.35
+
+//# Adex Parameters
+double C = 281*1e-12;	//pF
+double gL = 30*1e-9; //nS
+double taum = 281*1e-12 / 30*1e-9;	// C/gL	// double initilization of taum(?)
+double EL = -70.6*1e-3;	//mV
+double DeltaT = 2*1e-3;	//mV
+double vti = -50.4*1e-3;	//mV
+//#vtrest = vti + 5 * DeltaT
+double vtrest = -45*1e-3;	//mV
+double VTmax = 18*1e-3;	//mV
+double tauvt = 50*1e-3;	//ms
+
+double tauw = 144*1e-3;	//ms
+double c = 4*1e-9;	//ns
+double b = 0.0805*1e-9;	//nA
+double Vr = -70.6*1e-3;	//mV
+
 typedef unsigned long long timestamp;
 //Time stamp function for measuring DFE runtime
 static timestamp getTimestamp(){
@@ -224,283 +289,372 @@ void print_synapses(double* syn, int N_S, int N_S_pad, int N_Group_S, int N_Grou
 int main(void)
 {
 	timestamp t0,t1;
-	const int size = 384;
-	uint32_t N = 384;
-	uint32_t M = 384;
-	uint32_t steps = 3;
+	int BurstLengthBytes = 384;
+		FILE *f = fopen("Spikes.txt", "w");
+		FILE *g = fopen("Neurons_I.txt", "w");
+		FILE *h = fopen("array_A.txt", "w");
+	//neofytou connectivity testing
+		FILE *in = fopen("connections.txt", "r");
+		int nruns = 1;
 
-	uint32_t N_S = N;//100;
-	uint32_t N_Group_S = 0;
-	uint32_t N_Group_T = M;
+		for(int nrun = 0; nrun < nruns; nrun++){
+		double realtime = 0;
+		double stime = 0.004; //second
+		double stime2 = 50; //second
 
-	double input1_pos = 25;
-	double input2_pos = 75;
-	double rad = 5;
-
-	int size_d = size * 6;
-	int sizeBytes_d_var = size_d * sizeof(double);
-	//int sizeBytes_d_var = sizeBytes_d * 6;
-	int sizeBytes_i = size * sizeof(int);
-	double *x = malloc(sizeBytes_d_var);
-	//double *y = malloc(sizeBytes_d);
-	//double *s = malloc(sizeBytes_d);
-	double scalar = 3.0;
-	/*double *vm = malloc(sizeBytes_d);
-	double *vt = malloc(sizeBytes_d);
-	double *I = malloc(sizeBytes_d);
-	double *x = malloc(sizeBytes_d);
-	double *Spike = malloc(sizeBytes_i);*/
+		double resolution_export = 10 * 1e-3; //every x ms
 
 
-	// TODO Generate input data
-	/*for(int i = 0; i<size; ++i) {
-		//x[i] = i/10.0;
-		y[i] = i/20.0;
-	}*/
+		int N = 100;
+		#ifdef MxM
+			N = 0;
+		#endif
+		int M = 2;
+
+		uint32_t N_S;//100;
+		uint32_t N_Group_S;
+		uint32_t N_Group_T;
+
+		#ifdef NxM
+			N_S = N;//100;
+			N_Group_S = 0;
+			N_Group_T = M;	//for the simulation we have, normally is N
+			#endif
+
+		#ifdef MxM
+			N_S = 0;//100;
+			N_Group_S = M;
+			N_Group_T = M;	//for the simulation we have, normally is N
+		#endif
 
 
-	int adex_param_size = 16;	// word alligned size of adex parameters array
-	int adex_param_array_size = adex_param_size*sizeof(double);	// adex params array bytes
-	double *adex_params = malloc(adex_param_array_size);
-	//double *out = malloc(adex_param_array_size);
-	adex_params[0] = 281*1e-12; // C
-	adex_params[1] = 30*1e-9; // gL
-	adex_params[2] = (281*1e-12) / (30*1e-9); // taum
-	adex_params[3] = -70.6*1e-3; // EL
-	adex_params[4] = 2*1e-3; // DeltaT
-	adex_params[5] = -50.4*1e-3; // vti
-	adex_params[6] = -45*1e-3; // vtrest
-	adex_params[7] = 18*1e-3; // VTmax
-	adex_params[8] = 50*1e-3; // tauvt
-	adex_params[9] = 144*1e-3; // tauw
-	adex_params[10] = 4*1e-9; // c
-	adex_params[11] = 0.0805*1e-9; // b
-	adex_params[12] = -70.6*1e-3; // Vr
-	adex_params[13] = 1*1e-3; // defaultclock_dt
+		uint32_t N_S_pad = N_S, N_Group_S_pad = N_Group_S, N_Group_T_pad = N_Group_T;
+		if(N_S%BurstLengthBytes != 0) N_S_pad = (N_S/BurstLengthBytes)*BurstLengthBytes+BurstLengthBytes;
+		if(N_Group_S%BurstLengthBytes != 0) N_Group_S_pad = (N_Group_S/BurstLengthBytes)*BurstLengthBytes+BurstLengthBytes;
+		if(N_Group_T%BurstLengthBytes != 0) N_Group_T_pad = (N_Group_T/BurstLengthBytes)*BurstLengthBytes+BurstLengthBytes;
 
-	int stdp_param_size = 32;
-	int stdp_param_array_size = stdp_param_size*sizeof(double);
-	double *stdp_params = malloc(stdp_param_array_size);
-	stdp_params[0] = 0 * 1e-3;  //mV Ee
-	stdp_params[1] = 2 * 1e-3;	//ms taue
-	stdp_params[2] = 50; //Hz Fon
-	stdp_params[3] = 3; //Hz Foff
-	stdp_params[4] = 100 * 1e-10; // s
-	stdp_params[5] = 2.0; 	//Amax
-	stdp_params[6] = 0; 	//Amin
-	stdp_params[7] = 0.1; 	//Ainit
-	stdp_params[8] = 1.0;	//Umax
-	stdp_params[9] = 0;		//Umin
-	stdp_params[10] = 0.1;	//Uinit
-	stdp_params[11] = 0;	//dFBn
-	stdp_params[12] = 0;	//dFBp
-	stdp_params[13] = 0;	//dFFp
-	stdp_params[14] = 50 * 1e-3;	//ms tau_u
-	stdp_params[15] = 200 * 1e-3;	//ms tau_r
-	stdp_params[16] = 0.1771;		//AFBn
-	stdp_params[17] = 0.0327 * 1e3 * 1e-3;	//ms tau_FBn
-	stdp_params[18] = 0.1548;				//AFBp
-	stdp_params[19] = 0.2302 * 1e3 * 1e-3;	//ms tau_FBp
-	stdp_params[20] = 0.0618;				//AFFp
-	stdp_params[21] = 0.0666 * 1e3 * 1e-3;	//ms tauFFp
-	stdp_params[22] =  0.15;				//etaU
-	stdp_params[23] = 0.15;					//etaA
+		printf("N_S_pad = %d, N_Group_S_pad = %d, N_Group_T_pad = %d\n", N_S_pad, N_Group_S_pad, N_Group_T_pad);
 
-	// Initialization of Neuron Variables
-	for(uint32_t i = 0; i<M*6; i+=6) {
-		//vt[i] = adex_params[6];
-		//vm[i] = adex_params[3];
-		//I[i] = 0;
-		//x[i] = 0;
-		//Spike[i] = 0;
-		x[i] = adex_params[6];
-		x[i+1] = adex_params[3];
-		x[i+2] = 0;//i;
-		x[i+3] = 0;
-		x[i+4] = 0;
-	}
+		double input1_pos = 25;
+		double input2_pos = 75;
+		double rad = 5;
 
-	// Initialization of Synapses Variables
-	//Synapse *syn[N_S+N_Group_S];
-	int syn_size = (N_S+N_Group_S) * N_Group_T * 12;
-	int syn_sizeBytes = syn_size * sizeof(double);
-	double* syn = malloc(syn_sizeBytes);
-	//double syn[384*384*12*sizeof(double)];
-	//for(int i = 0; i < N_S+N_Group_S; i++) syn[i] = (double*)malloc(sizeof(double) * (N_Group_T));
-	int con = 1;
-	//Nx(M*12)
-	/*for(int i = 0; i < N_Group_S+N_S; i++)
-		for(int j = 0; j < N_Group_T*12; j+=12)
-			syn[i*N_Group_T*12+j] = 1;
-	// Initialization of Synapses for Neurons
-	int init_const = 0;
-	for(int i = 0; i < N_Group_S; i++){
-		for(int j = 0; j < N_Group_T*12; j+=12){
-			if (syn[i*N_Group_T*12+j]) {
-				//syn[i][j].conn = 1;	// all connected
-				//Connectivity, initialization now happens only in connected synapses.
-				syn[i*N_Group_T*12+j+3] = 0;
-				syn[i*N_Group_T*12+j+4] = 0;
-				syn[i*N_Group_T*12+j+5] = 1;
-				syn[i*N_Group_T*12+j+7] = exp(-(((pow((init_const+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(stdp_params[8]-stdp_params[9])+stdp_params[9];	// takes time
-				syn[i*N_Group_T*12+j+8] = exp(-(((pow((init_const+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(stdp_params[5]-stdp_params[6])+stdp_params[6];	// takes time
-				init_const++;
-				//syn[i][j].U = exp(-(((pow(((i)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(Umax-Umin)+Umin;	// takes time
-				//syn[i][j].A = exp(-(((pow(((i)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(Amax-Amin)+Amin;	// takes time
+		//Define input 1
+		double *F_input1;
+		F_input1 = (double*)malloc(sizeof(double)*N_S);
+		for(int i = 0; i < N_S; i++){
+			F_input1[i] = Foff;			//maybe is not needed
+			F_input1[i] = exp(-(pow((i+1)-input1_pos,2)/(2.0*pow(rad,2))))*(Fon-Foff)+Foff; //Define gaussian input
+		}
+
+		//Define input 2
+		double *F_input2;
+		F_input2 = (double*)malloc(sizeof(double)*N_S);
+		for(int i = 0; i < N_S; i++){
+			F_input2[i] = Foff;			//maybe is not needed
+			F_input2[i] = exp(-(pow((i+1)-input2_pos,2)/(2.0*pow(rad,2))))*(Fon-Foff)+Foff; //Define gaussian input
+		}
+
+		/*Poisson *input;
+		input = (Poisson*)malloc(sizeof(Poisson)*N_S);
+		for(int i = 0; i<N_S; i++){				// Initialization of Poisson Neurons
+			input[i].GaussArray = F_input1[i];
+			input[i].Spike = 0;
+		}*/
+
+		// ******** ADEX DE Parameters Initialization *********** //
+		int adex_param_size = 16;	// word alligned size of adex parameters array
+		int adex_param_array_size = adex_param_size*sizeof(double);	// adex params array bytes
+		double *adex_params = malloc(adex_param_array_size);
+		//double *out = malloc(adex_param_array_size);
+		adex_params[0] = C;
+		adex_params[1] = gL;
+		adex_params[2] = taum;
+		adex_params[3] = EL;
+		adex_params[4] = DeltaT;
+		adex_params[5] = vti;
+		adex_params[6] = vtrest;
+		adex_params[7] = VTmax;
+		adex_params[8] = tauvt;
+		adex_params[9] = tauw;
+		adex_params[10] = c;
+		adex_params[11] = b;
+		adex_params[12] = Vr;
+		adex_params[13] = defaultclock_dt;
+
+		// *********** STDP DE Parameters Initialization ************ //
+		int stdp_param_size = 32;
+		int stdp_param_array_size = stdp_param_size*sizeof(double);
+		double *stdp_params = malloc(stdp_param_array_size);
+		stdp_params[0] = Ee;
+		stdp_params[1] = taue;
+		stdp_params[2] = Fon;
+		stdp_params[3] = Foff;
+		stdp_params[4] = s;
+		stdp_params[5] = Amax;
+		stdp_params[6] = Amin;
+		stdp_params[7] = Ainit;
+		stdp_params[8] = Umax;
+		stdp_params[9] = Umin;
+		stdp_params[10] = Uinit;
+		stdp_params[11] = dFBn;
+		stdp_params[12] = dFBp;
+		stdp_params[13] = dFFp;
+		stdp_params[14] = tau_u;
+		stdp_params[15] = tau_r;
+		stdp_params[16] = AFBn;
+		stdp_params[17] = tau_FBn;
+		stdp_params[18] = AFBp;
+		stdp_params[19] = tau_FBp;
+		stdp_params[20] = AFFp;
+		stdp_params[21] = tau_FFp;
+		stdp_params[22] = etaU;
+		stdp_params[23] = etaA;
+
+		// ********* Neuron Initialization ******** //
+		int size_d = N_Group_T_pad * 6;
+		int sizeBytes_d_var = size_d * sizeof(double);
+		double *x = malloc(sizeBytes_d_var);
+		for(uint32_t i = 0; i<M*6; i+=6) {
+			//vt[i] = adex_params[6];
+			//vm[i] = adex_params[3];
+			//I[i] = 0;
+			//x[i] = 0;
+			//Spike[i] = 0;
+			x[i] = vtrest;
+			//x[i+1] = adex_params[3];
+			#ifdef NxM
+				x[i+1] = EL;
+			#endif
+			#ifdef MxM
+				x[i+1] = vtrest + 0.005;//EL;
+			#endif
+			x[i+2] = 0;//i;
+			x[i+3] = 0;
+			x[i+4] = 0;	// Spike
+		}
+
+		// ******** Synapses Initialization ******** //
+		int syn_size = (N_S_pad+N_Group_S_pad) * N_Group_T_pad * 12;
+		int syn_sizeBytes = syn_size * sizeof(double);
+		double* syn = malloc(syn_sizeBytes);
+		#ifndef allconnected
+			int con = 0;
+
+			for(int i = 0; i < N_Group_S; i++){
+				for(int j = 0; j < N_Group_T; j++){
+					fscanf (in, "%d", &con);
+					if (con == 1) syn[i+j*(N_Group_S+N_S)*12] = 1;
+					else syn[i+j*(N_Group_S+N_S)*12] = 0;
+				}
+			}
+
+			for(int i = N_Group_S; i < N_Group_S+N_S; i++){
+				for(int j = 0; j < N_Group_T; j++){
+					fscanf (in, "%d", &con);
+					if (con == 1) syn[i+j*(N_Group_S+N_S)*12] = 1;
+					else syn[i+j*(N_Group_S+N_S)*12] = 0;
+				}
+			}
+		#else
+			for(int j = 0; j < N_Group_T_pad; j++)
+				for(int i = 0; i < N_Group_S_pad*12; i+=12)
+					if((i < N_Group_S*12) & (j < N_Group_T)) syn[i+j*(N_Group_S_pad+N_S_pad)*12] = 1;
+					else syn[i+j*(N_Group_S_pad+N_S_pad)*12] = 0;
+			for(int j = 0; j < N_Group_T_pad; j++)
+				for(int i = N_Group_S_pad*12; i < (N_Group_S_pad+N_S_pad)*12; i+=12)
+					if((i-N_Group_S_pad*12 < N_S*12) & (j < N_Group_T)) syn[i+j*(N_Group_S_pad+N_S_pad)*12] = 1;
+					else syn[i+j*(N_Group_S_pad+N_S_pad)*12] = 0;
+		#endif
+		int init_const = 0;
+		for(int i = 0; i < N_Group_S_pad*12; i+=12){
+			for(int j = 0; j < N_Group_T_pad; j++){
+				if (syn[i+j*(N_Group_S_pad+N_S_pad)*12]) {
+					//syn[i][j].conn = 1;	// all connected
+					//Connectivity, initialization now happens only in connected synapses.
+					//syn[i+j*(N_Group_S+N_S)*12+2] = init_const;//0;
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+3] = init_const;//0;
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+4] = init_const;//0;
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+5] = init_const;//1;
+					#ifdef MxM
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+6] = 1;	// for testing
+					#endif
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+7] = init_const;//exp(-(((pow((init_const+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(stdp_params[8]-stdp_params[9])+stdp_params[9];	// takes time
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+8] = init_const;//exp(-(((pow((init_const+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(stdp_params[5]-stdp_params[6])+stdp_params[6];	// takes time
+					init_const++;
+					//syn[i][j].U = exp(-(((pow(((i)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(Umax-Umin)+Umin;	// takes time
+					//syn[i][j].A = exp(-(((pow(((i)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(Amax-Amin)+Amin;	// takes time
+				}
 			}
 		}
-	}
-	// Initialization of Synapses for external input (bottom rows)
-	for(int i = N_Group_S; i < N_Group_S+N_S; i++){
-		for(int j = 0; j < N_Group_T*12; j+=12){
-			if (syn[i*N_Group_T*12+j]) {
-				//Connectivity, initialization now happens only in connected synapses.
-				//syn[i][j].conn = 1;	// all connected
-				syn[i*N_Group_T*12+j+3] = init_const;//0;
-				syn[i*N_Group_T*12+j+4] = 0;
-				syn[i*N_Group_T*12+j+5] = 1;
-				//syn[i][j].U = exp(-(((pow((((i-N_Group_S)*N_Group_T/M+j)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(Umax-Umin)+Umin;	// takes time
-				//syn[i][j].A = exp(-(((pow((((i-N_Group_S)*N_Group_T/M+j)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(Amax-Amin)+Amin;	// takes time
-				syn[i*N_Group_T*12+j+7] = exp(-(((pow(((init_const)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(stdp_params[8]-stdp_params[9])+stdp_params[9];	// takes time
-				syn[i*N_Group_T*12+j+8] = exp(-(((pow(((init_const)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(stdp_params[5]-stdp_params[6])+stdp_params[6];	// takes time
-				init_const++;
+		// Initialization of Synapses for external input (bottom rows)
+		for(int i = N_Group_S_pad*12; i < (N_Group_S_pad+N_S_pad)*12; i+=12){
+			for(int j = 0; j < N_Group_T_pad; j++){
+				if (syn[i+j*(N_Group_S_pad+N_S_pad)*12]) {
+					//Connectivity, initialization now happens only in connected synapses.
+					//syn[i][j].conn = 1;	// all connected
+					//syn[i+j*(N_Group_S+N_S)*12+2] = init_const;//0;
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+3] = init_const;//0;//init_const;//0;
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+4] = init_const;//0;
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+5] = init_const;//1;
+					//syn[i][j].U = exp(-(((pow((((i-N_Group_S)*N_Group_T/M+j)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(Umax-Umin)+Umin;	// takes time
+					//syn[i][j].A = exp(-(((pow((((i-N_Group_S)*N_Group_T/M+j)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(Amax-Amin)+Amin;	// takes time
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+7] = init_const;//exp(-(((pow(((init_const)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(stdp_params[8]-stdp_params[9])+stdp_params[9];	// takes time
+					syn[i+j*(N_Group_S_pad+N_S_pad)*12+8] = init_const;//exp(-(((pow(((init_const)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(stdp_params[5]-stdp_params[6])+stdp_params[6];	// takes time
+					init_const++;
+				}
 			}
 		}
-	}*/
 
-	//Mx(N*12)
-	for(int i = 0; i < (N_Group_S+N_S)*12; i+=12)
-		for(int j = 0; j < N_Group_T; j++)
-			syn[i+j*(N_Group_S+N_S)*12] = 1;
-	// Initialization of Synapses for Neurons
-	int init_const = 0;
-	for(int i = 0; i < N_Group_S*12; i+=12){
-		for(int j = 0; j < N_Group_T; j++){
-			if (syn[i+j*(N_Group_S+N_S)*12]) {
-				//syn[i][j].conn = 1;	// all connected
-				//Connectivity, initialization now happens only in connected synapses.
-				//syn[i+j*(N_Group_S+N_S)*12+2] = init_const;//0;
-				syn[i+j*(N_Group_S+N_S)*12+1] = 0;
-				syn[i+j*(N_Group_S+N_S)*12+2] = 0;
-				syn[i+j*(N_Group_S+N_S)*12+3] = init_const;//0;
-				syn[i+j*(N_Group_S+N_S)*12+4] = init_const;//0;
-				syn[i+j*(N_Group_S+N_S)*12+5] = init_const;//1;
-				syn[i+j*(N_Group_S+N_S)*12+6] = 0;
-				syn[i+j*(N_Group_S+N_S)*12+7] = init_const;//exp(-(((pow((init_const+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(stdp_params[8]-stdp_params[9])+stdp_params[9];	// takes time
-				syn[i+j*(N_Group_S+N_S)*12+8] = init_const;//exp(-(((pow((init_const+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(stdp_params[5]-stdp_params[6])+stdp_params[6];	// takes time
-				syn[i+j*(N_Group_S+N_S)*12+9] = 0;
-				syn[i+j*(N_Group_S+N_S)*12+10] = 0;
-				syn[i+j*(N_Group_S+N_S)*12+11] = 0;
-				init_const++;
-				//syn[i][j].U = exp(-(((pow(((i)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(Umax-Umin)+Umin;	// takes time
-				//syn[i][j].A = exp(-(((pow(((i)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(Amax-Amin)+Amin;	// takes time
+		uint32_t timesteps = stime/defaultclock_dt;
+		printf("timesteps=%d\n",timesteps);
+
+		// ********** Input Neurons Spikes Initialization ********** //
+		int SpikeArray_size = N_S_pad * timesteps * sizeof(int);
+		int* SpikeArray = malloc(SpikeArray_size);
+		for(int i = 0; i < timesteps; i++){
+			for(int j = 0; j < N_S_pad; j++){
+				SpikeArray[i*N_S_pad+j] = i%2;
 			}
 		}
-	}
-	// Initialization of Synapses for external input (bottom rows)
-	for(int i = N_Group_S*12; i < (N_Group_S+N_S)*12; i+=12){
-		for(int j = 0; j < N_Group_T; j++){
-			if (syn[i+j*(N_Group_S+N_S)*12]) {
-				//Connectivity, initialization now happens only in connected synapses.
-				//syn[i][j].conn = 1;	// all connected
-				//syn[i+j*(N_Group_S+N_S)*12+2] = init_const;//0;
-				syn[i+j*(N_Group_S+N_S)*12+1] = 0;
-				syn[i+j*(N_Group_S+N_S)*12+2] = 0;
-				syn[i+j*(N_Group_S+N_S)*12+3] = init_const;//0;//init_const;//0;
-				syn[i+j*(N_Group_S+N_S)*12+4] = init_const;//0;
-				syn[i+j*(N_Group_S+N_S)*12+5] = init_const;//1;
-				syn[i+j*(N_Group_S+N_S)*12+6] = 0;
-				//syn[i][j].U = exp(-(((pow((((i-N_Group_S)*N_Group_T/M+j)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(Umax-Umin)+Umin;	// takes time
-				//syn[i][j].A = exp(-(((pow((((i-N_Group_S)*N_Group_T/M+j)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(Amax-Amin)+Amin;	// takes time
-				syn[i+j*(N_Group_S+N_S)*12+7] = init_const;//exp(-(((pow(((init_const)+1)-input1_pos,2)))/(2.0*pow(rad+0,2))))*(stdp_params[8]-stdp_params[9])+stdp_params[9];	// takes time
-				syn[i+j*(N_Group_S+N_S)*12+8] = init_const;//exp(-(((pow(((init_const)+1)-input1_pos,2)))/(2.0*pow(rad+3,2))))*(stdp_params[5]-stdp_params[6])+stdp_params[6];	// takes time
-				syn[i+j*(N_Group_S+N_S)*12+9] = 0;
-				syn[i+j*(N_Group_S+N_S)*12+10] = 0;
-				syn[i+j*(N_Group_S+N_S)*12+11] = 0;
-				init_const++;
+
+		srand(time(NULL));
+
+		double init_time = 0, load_time = 0, unload_time = 0, memory_reads = 0, memory_writes = 0, DFE_time = 0;
+		timestamp t0, t1;
+
+
+		#ifdef NxM
+			//if(t == 0 ) SpikeArray[89+N_Group_T] = 1;
+			//else SpikeArray[89+N_Group_T] = 0;
+
+			//if(t == 2 || t == 25) SpikeArray[73+N_Group_T] = 1;
+			//else SpikeArray[73+N_Group_T] = 0;
+
+			//if(t*defaultclock_dt == 0.001) SpikeArray[25+N_Group_S] = 1;
+			//else SpikeArray[25+N_Group_S] = 0;
+
+			/*if(t == 4) SpikeArray[23] = 1;
+			else SpikeArray[23] = 0;*/
+			//SpikeArray[4*N_S_pad+23] = 1;
+
+			/*if(t == 5){
+				SpikeArray[20] = 1;
+				SpikeArray[45] = 1;
+
 			}
-		}
+			else {
+				SpikeArray[20] = 0;
+				SpikeArray[45] = 0;
+
+			}*/
+			//SpikeArray[5*N_S_pad+20] = 1;
+			//SpikeArray[5*N_S_pad+45] = 1;
+			//if(t == 6 ) SpikeArray[81+N_Group_T] = 1;
+			//else SpikeArray[81+N_Group_T] = 0;
+
+			/*if(t == 7 ) SpikeArray[7] = 1;
+			else SpikeArray[7] = 0;*/
+			//SpikeArray[7*N_S_pad+7] = 1;
+			/*if(t == 7 || t == 11 || t == 13 || t == 20 || t == 26 || t == 28 || t == 31) SpikeArray[27] = 1;
+			else SpikeArray[27] = 0;*/
+			//SpikeArray[7*N_S_pad+27] = 1;
+			//SpikeArray[11*N_S_pad+27] = 1;
+			//SpikeArray[13*N_S_pad+27] = 1;
+			//SpikeArray[20*N_S_pad+27] = 1;
+			//SpikeArray[26*N_S_pad+27] = 1;
+			//SpikeArray[28*N_S_pad+27] = 1;
+			//SpikeArray[31*N_S_pad+27] = 1;
+
+			/*if(t == 9 ) SpikeArray[25] = 1;
+			else SpikeArray[25] = 0;*/
+			//SpikeArray[9*N_S_pad+25] = 1;
+
+			/*if(t == 11 ) SpikeArray[11] = 1;
+			else SpikeArray[11] = 0;*/
+			//SpikeArray[11*N_S_pad+11] = 1;
+
+			/*if(t == 15 ) SpikeArray[29] = 1;
+			else SpikeArray[29] = 0;*/
+			//SpikeArray[15*N_S_pad+29] = 1;
+
+			/*if(t == 19 ) SpikeArray[32] = 1;
+			else SpikeArray[32] = 0;*/
+			//SpikeArray[29*N_S_pad+32] = 1;
+
+			/*if(t == 25){
+				SpikeArray[41] = 1;
+				//SpikeArray[73+N_Group_T] = 1;
+
+			}
+			else {
+				SpikeArray[41] = 0;
+				//SpikeArray[73+N_Group_T] = 0;
+
+			}*/
+			//SpikeArray[25*N_S_pad+41] = 1;
+
+			/*if(t == 26 ) SpikeArray[14] = 1;
+			else SpikeArray[14] = 0;*/
+			//SpikeArray[26*N_S_pad+14] = 1;
+
+			/*if(t == 28 || t == 30 ) SpikeArray[22] = 1;
+			else SpikeArray[22] = 0;*/
+			//SpikeArray[28*N_S_pad+22] = 1;
+			//SpikeArray[30*N_S_pad+22] = 1;
+
+			/*if(t == 28 ) SpikeArray[31] = 1;
+			else SpikeArray[31] = 0;*/
+			//SpikeArray[28*N_S_pad+31] = 1;
+
+			/*if(t == 29 ) SpikeArray[24] = 1;
+			else SpikeArray[24] = 0;*/
+			//SpikeArray[29*N_S_pad+24] = 1;
+		#endif
+
+		printf("Writing to LMem.\n");
+		t0 = getTimestamp();
+		Simulation_writeLMem(size_d, 0, x);
+		printf("Neurons Write Done.\n");
+		fflush(stdout);
+		Simulation_writeLMem(syn_size, size_d, syn);
+		printf("Synapses Write Done.\n");
+		fflush(stdout);
+		Simulation_writeLMem(SpikeArray_size, size_d + syn_size, SpikeArray);
+		printf("Spikes Write Done.\n");
+		fflush(stdout);
+		t1 = getTimestamp();
+		memory_writes = (t1-t0)/1000000.0;
+		printf("Running on DFE.\n");
+		fflush(stdout);
+
+		long BurstLengthInBytes = 384;
+		//UpdateNeurons(M, N, adex_param_size, stdp_param_size, steps, adex_params, stdp_params);
+		//UpdateNeurons(scalar, M, N, M, adex_param_size, stdp_param_size, steps, adex_params, stdp_params, y ,s);
+		t0 = getTimestamp();
+		//printf("loopLength = %d",UpdateSynapses_post_get_UpdateSynapses_postKernel_loopLength());
+		Simulation(N_Group_S_pad, N_Group_T_pad, N_S_pad, adex_param_size, stdp_param_size, timesteps, BurstLengthInBytes, adex_params, stdp_params);
+		t1 = getTimestamp();
+		DFE_time = (t1-t0)/1000000.0;
+		printf("DFE Runtime = %9.7f seconds\n", DFE_time);
+		fflush(stdout);
+
+		t0 = getTimestamp();
+		Simulation_readLMem(size_d, 0, x);
+		Simulation_readLMem(syn_size, size_d, syn);
+		t1 = getTimestamp();
+		memory_reads = (t1-t0)/1000000.0;
+
+		printf("memory_reads = %lf, memory_writes = %lf, DFE_time = %lf\n", memory_reads, memory_writes, DFE_time);
+		fflush(stdout);
+		print_neurons(x, N_Group_T);
+		print_synapses(syn,N_S, N_S_pad, N_Group_S, N_Group_S_pad, N_Group_T, N_Group_T_pad);
+		fflush(stdout);
 	}
-	// Initialization of Input Neurons Spikes
-	int InputSpikes_size = N_S * steps;
-	int InputSpikes_size_bytes = InputSpikes_size * sizeof(int);
-	int* InputSpikes = malloc(InputSpikes_size_bytes);
-	for(int i = 0; i < steps; i++){
-		for(int j = 0; j < N_S; j++){
-			InputSpikes[i*N_S+j] = 1;
-		}
-	}
 
-	//print_synapses(syn, N_S+N_Group_S, N_Group_T);
-	////print_synapses(syn, N_Group_T, N_S+N_Group_S);
-
-	printf("Writing to LMem.\n");
-	Simulation_writeLMem(size_d, 0, x);
-	Simulation_writeLMem(syn_size, size_d, syn);
-	Simulation_writeLMem(InputSpikes_size, size_d + syn_size, InputSpikes);
-	//UpdateSynapses_post_writeLMem(InputSpikes_size/sizeof(int), sizeBytes_d_var/sizeof(double) + syn_size/sizeof(double), InputSpikes);
-
-	/*UpdateNeurons_writeLMem(0, sizeBytes_d, vm);
-	UpdateNeurons_writeLMem(sizeBytes_d, sizeBytes_d, vt);
-	UpdateNeurons_writeLMem(sizeBytes_d * 2, sizeBytes_d, I);
-	UpdateNeurons_writeLMem(sizeBytes_d * 3, sizeBytes_d, x);
-	UpdateNeurons_writeLMem(sizeBytes_d * 4, sizeBytes_i, Spike);*/
-
-	/*printf("Adex Parameters\n");
-	for(int i = 0; i<14; i++){
-		printf("adex_params[%d] = %.8e\n",i,adex_params[i]);
-	}*/
-
-	printf("Running on DFE.\n");	
-	fflush(stdout);
-
-	long BurstLengthInBytes = 384;
-	//UpdateNeurons(M, N, adex_param_size, stdp_param_size, steps, adex_params, stdp_params);
-	//UpdateNeurons(scalar, M, N, M, adex_param_size, stdp_param_size, steps, adex_params, stdp_params, y ,s);
-	t0 = getTimestamp();
-	//printf("loopLength = %d",UpdateSynapses_post_get_UpdateSynapses_postKernel_loopLength());
-	Simulation(N_Group_S, N_Group_T, N_S, adex_param_size, stdp_param_size, steps, BurstLengthInBytes, adex_params, stdp_params);
-	t1 = getTimestamp();
-	printf("DFE Runtime = %9.7f seconds\n", (t1-t0)/1000000.0 );
-	fflush(stdout);
-	Simulation_readLMem(size_d, 0, x);
-	Simulation_readLMem(syn_size, size_d, syn);
-	/*UpdateNeurons_readLMem(0, sizeBytes_d, vm);
-	UpdateNeurons_readLMem(sizeBytes_d, sizeBytes_d, vt);
-	UpdateNeurons_readLMem(sizeBytes_d * 2, sizeBytes_d, I);
-	UpdateNeurons_readLMem(sizeBytes_d * 3, sizeBytes_d, x);
-	UpdateNeurons_readLMem(sizeBytes_d * 4, sizeBytes_i, Spike);*/
-
-	print_neurons(x, N_Group_T);
-	//print_synapses(syn, N_S+N_Group_S, N_Group_T);
-	print_synapses(syn,N_S, N_S, N_Group_S, N_Group_S, N_Group_T, N_Group_T);
-	// TODO Use result data
-	/*for(int i=0; i<size; ++i)
-		if (s[i] != x[i] + y[i] + scalar)
-			return 1;*/
-
-	/*printf("vt\n");
-	for(int i = 0; i < M*6; i+=6){
-		printf("%.8e\n",x[i]);
-	}
-	printf("vm\n");
-	for(int i = 1; i < M*6; i+=6){
-		printf("%.8e\n",x[i]);
-	}*/
-	/*printf("I\n");
-	for(int i = 2; i < M*6; i+=6){
-		printf("%.8e\n",x[i]);
-	}*/
-	//print_synapses(syn, N_Group_T, N_S+N_Group_S);
-	/*printf("x\n");
-	for(int i = 3; i < M*6; i+=6){
-		printf("%.8e\n",x[i]);
-	}
-	printf("Spike\n");
-	for(int i = 4; i < M*6; i+=6){
-		printf("%.8e\n",x[i]);
-	}*/
-
-	printf("Done.\n");
+	fclose(f);
+	fclose(g);
+	fclose(h);
+	fclose(in);
 	return 0;
 }

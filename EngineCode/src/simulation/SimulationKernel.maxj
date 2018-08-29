@@ -285,7 +285,7 @@ class SimulationKernel extends Kernel {
 		DFEVar FFp = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[2] * KernelMath.exp(-(-syn[9] + t)/tau_FFp) : syn[2];
 		DFEVar FBn = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[4] * KernelMath.exp(-(-syn[9] + t)/tau_FBn) : syn[4];
 		DFEVar control_pre = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1;
-		//control_pre.simWatch("control_pre");
+		control_pre.simWatch("control_pre");
 		DFEVar u = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[7] + (-syn[7] + syn[6]) * KernelMath.exp(-(-syn[9] + t)/tau_u) : syn[6];
 		//u.simWatch("u");
 		DFEVar FBp = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[3] * KernelMath.exp(-(-syn[9] + t)/tau_FBp) : syn[3];
@@ -343,14 +343,14 @@ class SimulationKernel extends Kernel {
 //		u.cast(double_type).simWatch("u");
 		DFEVar FBp_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[3] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FBp) : syn_o_p[3];
 		DFEVar R_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? (syn_o_p[5] - 1) * KernelMath.exp(-(-syn_o_p[9] + t)/tau_r) + 1 : syn_o_p[5];
-		DFEVar A_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[8] + etaA * (AFFp * FFp * FBn) : syn_o_p[8];
+		DFEVar A_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[8] + etaA * (AFFp * FFp_po * FBn_po) : syn_o_p[8];
 		// loop = 0 calculations finish
 
 		DFEVector<DFEVar> syn_o_po = SynapsesVector.newInstance(this);
 		syn_o_po[0] <== syn[0];
 		syn_o_po[1] <== w;
 		syn_o_po[2] <== FFp_po;
-		syn_o_po[3] <== FBp;
+		syn_o_po[3] <== FBp_po;
 		syn_o_po[4] <== FBn_po;
 		syn_o_po[5] <== R_po;
 		syn_o_po[6] <== u_po;
@@ -373,7 +373,7 @@ class SimulationKernel extends Kernel {
 		carriedNum <== stream.offset(num_t, -16/*loopLength*/);
 		DFEVar mean_t = sum_t/num_t;
 		DFEVar mean_fin = loopA === 2 ? mean_t : constant.var(0);
-//		mean_fin.simWatch("mean_fin");
+		mean_fin.simWatch("mean_fin");
 		// Mean calculation part finish
 
 		// loop = 1 calculations
@@ -391,24 +391,24 @@ class SimulationKernel extends Kernel {
 		// loop = 1 calculations finish
 
 		// Connecting Output
-		DFEVar FBp_fin = loopA === 1 ? FBp_po : FBp_po_1;
-		DFEVar FBn_fin = loopA === 1 ? FBn_po : FBn_po_1;
-		DFEVar A_fin = loopA === 1 ? A_po : A_po_tt;
+		//DFEVar FBp_fin = loopA === 1 ? FBp_po : FBp_po_1;
+		//DFEVar FBn_fin = loopA === 1 ? FBn_po : FBn_po_1;
+		//DFEVar A_fin = loopA === 1 ? A_po : A_po_tt;
 //		A_fin.cast(double_type).simWatch("A_fin");
 		DFEVector<DFEVar> syn_o = SynapsesVector.newInstance(this);
 
 		syn_o[0] <== syn[0];
 		syn_o[1] <== w_po;
 		syn_o[2] <== syn[2];
-		syn_o[3] <== FBp_fin;
-		syn_o[4] <== FBn_fin;
+		syn_o[3] <== FBp_po_1;
+		syn_o[4] <== FBn_po_1;
 		syn_o[5] <== syn[5];
 		syn_o[6] <== syn[6];
 		//syn[6].simWatch("syn_6");
 		//syn_o[6].simWatch("syn_o_6");
 		syn_o[7] <== syn[7];
-		syn_o[8] <== A_fin;
-		syn_o[9] <== lastupdate;
+		syn_o[8] <== A_po_tt;
+		syn_o[9] <== lastupdate_po;
 		syn_o[10] <== syn[10];
 		syn_o[11] <== syn[11];
 
