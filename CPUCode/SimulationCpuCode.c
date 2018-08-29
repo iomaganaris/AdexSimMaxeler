@@ -299,7 +299,7 @@ int main(void)
 
 		for(int nrun = 0; nrun < nruns; nrun++){
 		double realtime = 0;
-		double stime = 0.004; //second
+		double stime = 0.003; //second
 		double stime2 = 50; //second
 
 		double resolution_export = 10 * 1e-3; //every x ms

@@ -2,6 +2,8 @@ package simulation;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig.Effort;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig.OptimizationGoal;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
@@ -138,6 +140,8 @@ public class SimulationManager extends CustomManager{
 
 		buildConfig.setMPPRParallelism(params.getMPPRNumThreads());
 		buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
+		buildConfig.setBuildEffort(Effort.VERY_HIGH);
+		buildConfig.setOptimizationGoal(OptimizationGoal.AREA);
 	}
 
 	public static void main(String[] args) {

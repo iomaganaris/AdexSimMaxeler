@@ -65,8 +65,8 @@ class SimulationKernel extends Kernel {
 		CounterChain chainA = control.count.makeCounterChain(counterOne.getCount()>31);
 		DFEVar stepA = chainA.addCounter(steps,1);
 		DFEVar loopA = chainA.addCounter(3,1);
-		stepA.simWatch("stepA");
-		loopA.simWatch("loopA");
+		//stepA.simWatch("stepA");
+		//loopA.simWatch("loopA");
 		DFEVar burstCountA = chainA.addCounter(totalBurstsX,1);
 		DFEVar wordCountA = chainA.addCounter(wordsPerBurstX,1);
 		DFEVar tempA_1_max = M_S+N;
@@ -285,7 +285,7 @@ class SimulationKernel extends Kernel {
 		DFEVar FFp = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[2] * KernelMath.exp(-(-syn[9] + t)/tau_FFp) : syn[2];
 		DFEVar FBn = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[4] * KernelMath.exp(-(-syn[9] + t)/tau_FBn) : syn[4];
 		DFEVar control_pre = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1;
-		control_pre.simWatch("control_pre");
+		//control_pre.simWatch("control_pre");
 		DFEVar u = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[7] + (-syn[7] + syn[6]) * KernelMath.exp(-(-syn[9] + t)/tau_u) : syn[6];
 		//u.simWatch("u");
 		DFEVar FBp = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[3] * KernelMath.exp(-(-syn[9] + t)/tau_FBp) : syn[3];
@@ -307,12 +307,12 @@ class SimulationKernel extends Kernel {
 		DFEVector<DFEVar> x_out_p = vectorVars.newInstance(this);
 
 		x_t = n === 0 ? x_copy : stream.offset(x_out_p,-16/*loopLength*/);
-		x_t[2].simWatch("x_t_I");
+		//x_t[2].simWatch("x_t_I");
 		//x_tt = loop_counter === 0 ? x_t : x_tt;
 		x_out_p[0] <== x_t[0];
 		x_out_p[1] <== x_t[1];
 		x_out_p[2] <== (syn[0] === 1 & ((n < M_S & SourceNeuron[4] === 1) | (n>= M_S & spike === 1))) ? targetI : x_t[2];
-		x_out_p[2].simWatch("x_o_I");
+		//x_out_p[2].simWatch("x_o_I");
 		x_out_p[3] <== x_t[3];
 		x_out_p[4] <== x_t[4];
 		x_out_p[5] <== x_t[5];
@@ -367,13 +367,17 @@ class SimulationKernel extends Kernel {
 		DFEVar sum_t = m === 0 & n === 0 & loopA === 1 ? constant.var(0) : carriedSum;
 		DFEVar num_t = m === 0 & n === 0 & loopA === 1 ? constant.var(0) : carriedNum;
 
-		sum_t = x[4] === 1 & syn[0] === 1 & loopA === 1 ? sum_t + AFFp * FFp * FBn : sum_t;
+		sum_t = x[4] === 1 & syn[0] === 1 & loopA === 1 ? sum_t + AFFp * FFp_po * FBn_po : sum_t;
+		//FFp_po.simWatch("FFp_po");
+		//FBn_po.simWatch("FBn_po");
+		//sum_t.simWatch("sum_t");
 		num_t = x[4] === 1 & syn[0] === 1 & loopA === 1 ? num_t + 1 : num_t;
 		carriedSum <== stream.offset(sum_t, -16/*loopLength*/);
 		carriedNum <== stream.offset(num_t, -16/*loopLength*/);
 		DFEVar mean_t = sum_t/num_t;
+		//mean_t.simWatch("mean_t");
 		DFEVar mean_fin = loopA === 2 ? mean_t : constant.var(0);
-		mean_fin.simWatch("mean_fin");
+		//mean_fin.simWatch("mean_fin");
 		// Mean calculation part finish
 
 		// loop = 1 calculations
@@ -414,7 +418,7 @@ class SimulationKernel extends Kernel {
 
 		// ********** UPDATE SYNAPSES POST END ************* //
 		DFEVector<DFEVar> x_out = loopA === 0 ? x_o_arr : x_out_p;
-		x_out[2].simWatch("x_out_I");
+		//x_out[2].simWatch("x_out_I");
 		DFEVar x_control_out = ~readingInput & ((loopA === 0 & tempA_1 === 0) | (loopA === 1 & tempA_1 === tempA_1_max-1)) & tempA_2 === 15;
 		//x_control_out.simWatch("x_control_out");
 		io.output("XOut", x_out, vectorVars, x_control_out);
