@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <maxCompilerManager version="2">
-<enginePart internalEngineSubproject="SingleKernel_EngineCode" isSrcBin="false" isUseDefaultSelected="false" outputLocation="/SingleKernel_EngineCode/bin" projectName="SingleKernel"/>
-<cpuPart internalCpuSubproject="SingleKernel_CPUCode"/>
+<enginePart internalEngineSubproject="SingleKernel_float_unroll2_EngineCode" isSrcBin="false" isUseDefaultSelected="false" outputLocation="/SingleKernel_float_unroll2_EngineCode/bin" projectName="SingleKernel_float_unroll2"/>
+<cpuPart internalCpuSubproject="SingleKernel_float_unroll2_CPUCode"/>
 <watchedFiles/>
 </maxCompilerManager>

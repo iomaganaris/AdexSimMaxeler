@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>SingleKernel_CPUCode</name>
+	<name>SingleKernel_float_unroll2_CPUCode</name>
 	<comment></comment>
 	<manageMaxCompiler>false</manageMaxCompiler>
 	<manageMaxGenFD>false</manageMaxGenFD>

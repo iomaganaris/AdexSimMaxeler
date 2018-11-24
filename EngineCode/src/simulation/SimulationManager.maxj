@@ -24,6 +24,9 @@ public class SimulationManager extends CustomManager{
 		super(engineParameters);
 		KernelBlock k = addKernel(new SimulationKernel(makeKernelParameters(s_kernelName)));
 		debug.setDebugLevel(new DebugLevel(){{setHasStreamStatus(true);}});
+
+		//ManagerClock myClk = generateStreamClock("myClk", 85);
+		//k.setClock(myClk);
 		DFELink fromcpu = addStreamFromCPU("fromcpu");
 		DFELink tocpu = addStreamToCPU("tocpu");
 
@@ -56,73 +59,97 @@ public class SimulationManager extends CustomManager{
 	private static EngineInterface interfaceWrite(String name) {
 		EngineInterface ei = new EngineInterface(name);
 
-		InterfaceParam size  = ei.addParam("size", CPUTypes.INT);
-		InterfaceParam start = ei.addParam("start", CPUTypes.INT);
-		InterfaceParam sizeInBytes = size * CPUTypes.DOUBLE.sizeInBytes();
+		InterfaceParam size  = ei.addParam("size", CPUTypes.UINT64);
+		InterfaceParam start = ei.addParam("start", CPUTypes.UINT64);
+		InterfaceParam sizeInBytes = size * CPUTypes.FLOAT.sizeInBytes();
 
-		ei.setStream("fromcpu", CPUTypes.DOUBLE, sizeInBytes );
-		ei.setLMemLinear("tolmem", start * CPUTypes.DOUBLE.sizeInBytes(), sizeInBytes);
+		ei.setStream("fromcpu", CPUTypes.FLOAT, sizeInBytes );
+		ei.setLMemLinear("tolmem", start * CPUTypes.FLOAT.sizeInBytes(), sizeInBytes);
 		ei.ignoreAll(Direction.IN_OUT);
 		return ei;
 	}
+	private static EngineInterface interfaceWriteInt(String name) {
+		EngineInterface ei = new EngineInterface(name);
 
+		InterfaceParam size  = ei.addParam("size", CPUTypes.UINT64);
+		InterfaceParam start = ei.addParam("start", CPUTypes.UINT64);
+		InterfaceParam sizeInBytes = size * CPUTypes.UINT8.sizeInBytes();
+
+		ei.setStream("fromcpu", CPUTypes.UINT8, sizeInBytes );
+		ei.setLMemLinear("tolmem", start * CPUTypes.FLOAT.sizeInBytes(), sizeInBytes);
+		ei.ignoreAll(Direction.IN_OUT);
+		return ei;
+	}
 	// reads the data back to the CPU from the LMem
 	private static EngineInterface interfaceRead(String name) {
 		EngineInterface ei = new EngineInterface(name);
 
-		InterfaceParam size  = ei.addParam("size", CPUTypes.INT);
-		InterfaceParam start = ei.addParam("start", CPUTypes.INT);
-		InterfaceParam sizeInBytes = size * CPUTypes.DOUBLE.sizeInBytes();
+		InterfaceParam size  = ei.addParam("size", CPUTypes.UINT64);
+		InterfaceParam start = ei.addParam("start", CPUTypes.UINT64);
+		InterfaceParam sizeInBytes = size * CPUTypes.FLOAT.sizeInBytes();
 
-		ei.setLMemLinear("fromlmem", start * CPUTypes.DOUBLE.sizeInBytes(), sizeInBytes);
-		ei.setStream("tocpu", CPUTypes.DOUBLE, sizeInBytes);
+		ei.setLMemLinear("fromlmem", start * CPUTypes.FLOAT.sizeInBytes(), sizeInBytes);
+		ei.setStream("tocpu", CPUTypes.FLOAT, sizeInBytes);
 		ei.ignoreAll(Direction.IN_OUT);
 		return ei;
 	}
 
 	private static EngineInterface interfaceDefault() {
 		EngineInterface engine_interface = new EngineInterface();
-		CPUTypes   double_type = CPUTypes.DOUBLE;
+		CPUTypes   double_type = CPUTypes.FLOAT;
 		int        double_size = double_type.sizeInBytes();
 
 		CPUTypes   int_type = CPUTypes.INT;
 		int        int_size = int_type.sizeInBytes();
 
-		int loop2Length = 4;	// Same with kernel
+		//int loop2Length = 4;	// Same with kernel
 
 		InterfaceParam  N_adex = engine_interface.addParam("N_adex", CPUTypes.INT); //number of adex params
 		InterfaceParam  N_stdp = engine_interface.addParam("N_stdp", CPUTypes.INT); //number of stdp params
-		InterfaceParam  N    = engine_interface.addParam("N", CPUTypes.UINT32); //inputs
-		InterfaceParam  M_S    = engine_interface.addParam("M_S", CPUTypes.UINT32); //adex neurons source
-		InterfaceParam  M_T    = engine_interface.addParam("M_T", CPUTypes.UINT32); //adex neurons target
+		InterfaceParam  N    = engine_interface.addParam("N", CPUTypes.UINT64); //inputs
+		InterfaceParam  M_S    = engine_interface.addParam("M_S", CPUTypes.UINT64); //adex neurons source
+		InterfaceParam  M_T    = engine_interface.addParam("M_T", CPUTypes.UINT64); //adex neurons target
 		InterfaceParam  steps   = engine_interface.addParam("Steps", CPUTypes.UINT32);
+		InterfaceParam  start   = engine_interface.addParam("Start", double_type);
 		InterfaceParam  zero = engine_interface.addConstant(0l);
 		InterfaceParam  one = engine_interface.addConstant(1l);
 
-		InterfaceParam  burstSize = engine_interface.addParam("burstSize", int_type);
+		int Unroll_Factor = 2;
 
-		engine_interface.setScalar(s_kernelName, "totalBurstsSyn", (12*(M_T*(M_S+N))*(double_size))/burstSize);
-		engine_interface.setScalar(s_kernelName, "wordsPerBurstSyn", burstSize/(double_size*12));
-		engine_interface.setScalar(s_kernelName, "totalBurstsX", M_T*6*double_size/burstSize);
-		engine_interface.setScalar(s_kernelName, "wordsPerBurstX", burstSize/(double_size*6));
+		InterfaceParam  burstSize = engine_interface.addParam("burstSize", int_type);
+		InterfaceParam totalBurstsSyn = (12*(M_T*(M_S+N))*(double_size))/burstSize;
+		InterfaceParam wordsPerBurstSyn = burstSize/(double_size*12*Unroll_Factor);
+		InterfaceParam totalBurstsX = M_T*6*double_size/burstSize;
+		InterfaceParam wordsPerBurstX = burstSize/(double_size*6);
+		engine_interface.setScalar(s_kernelName, "totalBurstsSyn", totalBurstsSyn);
+		engine_interface.setScalar(s_kernelName, "wordsPerBurstSyn", wordsPerBurstSyn);
+		engine_interface.setScalar(s_kernelName, "totalBurstsX", totalBurstsX);
+		engine_interface.setScalar(s_kernelName, "wordsPerBurstX", wordsPerBurstX);
 
 		InterfaceParam loopLength = engine_interface.getAutoLoopOffset(s_kernelName, "loopLength");
 		engine_interface.ignoreAutoLoopOffset(s_kernelName, "loopLength");
 
-		engine_interface.setTicks(s_kernelName, N_stdp + /*loopLength*/16*(N+M_S)*M_T*3*steps /*+ loop2Length*(N+M_S)*M_T*/);
+		int loop1Length = 2;
+		int loop2Length = 16;
+		int loop3Length = 4;
+
+		//engine_interface.setTicks(s_kernelName, N_stdp + //N_stdp + /*loopLength*/16*(N+M_S)*M_T*3*steps /*+ loop2Length*(N+M_S)*M_T*/);
+		InterfaceParam ticks = N_stdp + loop1Length*M_T*steps + (loop2Length*(N+M_S)*M_T +  loop3Length*(N+M_S)*M_T)*steps/Unroll_Factor/*+ loop2Length*(N+M_S)*M_T*/;
+		engine_interface.setTicks(s_kernelName, ticks);
 
 		engine_interface.setScalar(s_kernelName, "N", N);
 		engine_interface.setScalar(s_kernelName, "M_S", M_S);
 		engine_interface.setScalar(s_kernelName, "M_T", M_T);
 		engine_interface.setScalar(s_kernelName, "Steps", steps);
+		engine_interface.setScalar(s_kernelName, "Start", start);
 		//engine_interface.setLMemLinear("x", zero, M_T * 6 * double_size);
 		//InterfaceParam adjacency_matrix_size = (M_S + N) * M_T * 12 * double_size;
 		//engine_interface.setLMemLinear("syn", M_T * 6 * double_size, adjacency_matrix_size);
 		//engine_interface.setLMemLinear("syn_o", M_T * 6 * double_size, adjacency_matrix_size);
-		engine_interface.setStream("adex_params", CPUTypes.DOUBLE,N_adex * CPUTypes.DOUBLE.sizeInBytes());
-		engine_interface.setStream("stdp_params", CPUTypes.DOUBLE,N_stdp * CPUTypes.DOUBLE.sizeInBytes());
+		engine_interface.setStream("adex_params", CPUTypes.FLOAT,N_adex * CPUTypes.FLOAT.sizeInBytes());
+		engine_interface.setStream("stdp_params", CPUTypes.FLOAT,N_stdp * CPUTypes.FLOAT.sizeInBytes());
 		InterfaceParam adjacency_matrix_size = (M_S + N) * M_T * 12 * double_size;
-		engine_interface.setLMemLinear("InputSpikes", M_T * 6 * double_size + adjacency_matrix_size,  N * steps * CPUTypes.INT.sizeInBytes());
+		engine_interface.setLMemLinear("InputSpikes", M_T * 6 * double_size + adjacency_matrix_size,  N * steps * CPUTypes.UINT8.sizeInBytes()/Unroll_Factor);
 		//engine_interface.setLMemLinearWrapped("SourceNeurons", zero, M_S * 6 * double_size, M_T * M_S * 6 * double_size, zero);
 		////engine_interface.setLMemInterruptOn("SynOut");
 		//
@@ -141,18 +168,20 @@ public class SimulationManager extends CustomManager{
 		buildConfig.setMPPRParallelism(params.getMPPRNumThreads());
 		buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
 		buildConfig.setBuildEffort(Effort.VERY_HIGH);
-		buildConfig.setOptimizationGoal(OptimizationGoal.AREA);
+		buildConfig.setOptimizationGoal(OptimizationGoal.SPEED);
 	}
 
 	public static void main(String[] args) {
 		SimulationEngineParameters params = new SimulationEngineParameters(args);
 		CustomManager m = new SimulationManager(params);
+		//m.setDefaultStreamClockFrequency(90);
 
 		m.createSLiCinterface(interfaceDefault());
 		//debug.dfePrintf(true, "setMPPRParallelism = %d\n",params.getMPPRThreads());
 		configBuild(m, params);
 		m.createSLiCinterface(interfaceRead("readLMem"));
 		m.createSLiCinterface(interfaceWrite("writeLMem"));
+		m.createSLiCinterface(interfaceWriteInt("writeLMemInt"));
 		m.build();
 	}
 }

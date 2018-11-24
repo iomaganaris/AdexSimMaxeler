@@ -19,31 +19,51 @@ import com.maxeler.maxcompiler.v2.utils.MathUtils;
 class SimulationKernel extends Kernel {
 
 	private static final DFEType type = dfeInt(32);
-	private static final DFEType double_type = dfeFloat(11,53);
+	private static final DFEType double_type = dfeFloat(8,24);//dfeFloat(11,53);
 	private static final DFEType long_type = dfeInt(80);
 
 	protected SimulationKernel(KernelParameters parameters) {
 		super(parameters);
-
+		//PipelinedOps op = PipelinedOps.ALL;
+		//optimization.pushPipeliningFactor(0.8, op); //.pushPipeliningFactor(0.8);
+		int Unroll_Factor = 2;
 		DFEVectorType<DFEVar> vectorVars =
-			new DFEVectorType<DFEVar>(dfeFloat(11,53), 6); // The real size of the vector is 5 but the program would not compile
+			new DFEVectorType<DFEVar>(double_type, 6); // The real size of the vector is 5 but the program would not compile
+
+		DFEVectorType<DFEVar> vectorVarsSN =
+			new DFEVectorType<DFEVar>(double_type, 6*Unroll_Factor);
 
 		DFEVectorType<DFEVar> SynapsesVector =
-			new DFEVectorType<DFEVar>(dfeFloat(11,53), 12); // The real size of the vector is 11 but the program would not compile
+			new DFEVectorType<DFEVar>(double_type, 12*Unroll_Factor); // The real size of the vector is 11 but the program would not compile
 
-		int loop2Length = 4;	// Same with manager
+		DFEVectorType<DFEVar> VarVector =
+			new DFEVectorType<DFEVar>(double_type, Unroll_Factor);
+
+		DFEVectorType<DFEVar> VarVectorD =
+			new DFEVectorType<DFEVar>(dfeFloat(11,53), Unroll_Factor);
+
+		DFEVectorType<DFEVar> VarVectorInt =
+			new DFEVectorType<DFEVar>(dfeUInt(1), Unroll_Factor);
+
+		DFEVectorType<DFEVar> InputSpikesVector =
+			new DFEVectorType<DFEVar>(dfeUInt(8), Unroll_Factor);
+
+		int loop1Length = 2;
+		int loop2Length = 16;
+		int loop3Length = 4;
 
 		OffsetExpr loopLength = stream.makeOffsetAutoLoop("loopLength");
 		DFEVar loopLengthVal = loopLength.getDFEVar(this, dfeUInt(32));
 
-		DFEVar N = io.scalarInput("N", dfeUInt(32));	// Number of Input Neurons
-		DFEVar M_S = io.scalarInput("M_S", dfeUInt(32));	// Number of Adex Source Neurons
-		DFEVar M_T = io.scalarInput("M_T", dfeUInt(32));	// Number of Adex Target Neurons
+		DFEVar N = io.scalarInput("N", dfeUInt(64));	// Number of Input Neurons
+		DFEVar M_S = io.scalarInput("M_S", dfeUInt(64));	// Number of Adex Source Neurons
+		DFEVar M_T = io.scalarInput("M_T", dfeUInt(64));	// Number of Adex Target Neurons
 		DFEVar steps = io.scalarInput("Steps", dfeUInt(32));	// Steps of Simulation
-		DFEVar totalBurstsX = io.scalarInput("totalBurstsX",dfeUInt(32));
-		DFEVar wordsPerBurstX = io.scalarInput("wordsPerBurstX",dfeUInt(32));
-		DFEVar totalBurstsSyn = io.scalarInput("totalBurstsSyn",dfeUInt(32));
-		DFEVar wordsPerBurstSyn = io.scalarInput("wordsPerBurstSyn",dfeUInt(32));
+		DFEVar start = io.scalarInput("Start", double_type);	// Steps of Simulation
+		DFEVar totalBurstsX = io.scalarInput("totalBurstsX",dfeUInt(64));
+		DFEVar wordsPerBurstX = io.scalarInput("wordsPerBurstX",dfeUInt(64));
+		DFEVar totalBurstsSyn = io.scalarInput("totalBurstsSyn",dfeUInt(64));
+		DFEVar wordsPerBurstSyn = io.scalarInput("wordsPerBurstSyn",dfeUInt(64));
 		//debug.simPrintf("totalBurstsX = %d, wordsPerBurstX = %d, totalBurstsSyn = %d, wordsPerBurstSyn = %d, steps = %d\n", totalBurstsX, wordsPerBurstX, totalBurstsSyn, wordsPerBurstSyn, steps);
 
 		int adex_params_size = 16; // for allignment
@@ -61,35 +81,75 @@ class SimulationKernel extends Kernel {
 
 		// Counters for reading Neurons and Synapses
 
+		//World counter
+		DFEVar loop1 = loop1Length*M_T;
+		DFEVar loop2 = loop2Length*M_T*(M_S+N)/Unroll_Factor;
+		DFEVar loop3 = loop3Length*M_T*(M_S+N)/Unroll_Factor;
+		DFEVar stepCounts = loop1 + loop2 + loop3;
+		CounterChain worldCounter = control.count.makeCounterChain(counterOne.getCount()>31);
+		DFEVar step = worldCounter.addCounter(steps,1);
+		DFEVar counter = worldCounter.addCounter(stepCounts, 1);
+		DFEVar loop1Bool = counter < loop1 & counterOne.getCount()>31;
+		DFEVar loop2Bool = loop1Bool.neq(1) & counter < (loop1 + loop2) & counterOne.getCount()>31;
+		DFEVar loop3Bool = loop1Bool.neq(1) & loop2Bool.neq(1) & counterOne.getCount()>31;
+
 		//First loop counters
-		CounterChain chainA = control.count.makeCounterChain(counterOne.getCount()>31);
-		DFEVar stepA = chainA.addCounter(steps,1);
-		DFEVar loopA = chainA.addCounter(3,1);
-		//stepA.simWatch("stepA");
-		//loopA.simWatch("loopA");
-		DFEVar burstCountA = chainA.addCounter(totalBurstsX,1);
-		DFEVar wordCountA = chainA.addCounter(wordsPerBurstX,1);
-		DFEVar tempA_1_max = M_S+N;
-		DFEVar tempA_1 = chainA.addCounter(tempA_1_max,1);
-		DFEVar tempA_2 = chainA.addCounter(/*loopLengthVal*/16,1);
+		CounterChain chain1 = control.count.makeCounterChain(loop1Bool);
+		DFEVar burstCount1 = chain1.addCounter(totalBurstsX,1);
+		DFEVar wordCount1 = chain1.addCounter(wordsPerBurstX,1);
+		DFEVar temp1 = chain1.addCounter(loop1Length,1);
 
-		DFEVar n = tempA_1;
-		DFEVar m = burstCountA*wordsPerBurstX + wordCountA;
-		//n.simWatch("n");
-		//m.simWatch("m");
+		//Second loop counters
+		CounterChain chain2_A = control.count.makeCounterChain(loop2Bool);
+		DFEVar burstCount2_A = chain2_A.addCounter(totalBurstsX,1);
+		DFEVar wordCount2_A = chain2_A.addCounter(wordsPerBurstX,1);
+		DFEVar temp2_A_1_max = (M_S+N)/Unroll_Factor;
+		DFEVar temp2_A_1 = chain2_A.addCounter(temp2_A_1_max,1);
+		DFEVar temp2_A_2 = chain2_A.addCounter(loop2Length,1);
 
-		CounterChain chainB = control.count.makeCounterChain(counterOne.getCount()>31);
-		DFEVar stepB = chainB.addCounter(steps,1);
-		DFEVar loopB = chainB.addCounter(3,1);
-		DFEVar burstCountB = chainB.addCounter(totalBurstsSyn,1);
-		DFEVar wordCountB = chainB.addCounter(wordsPerBurstSyn,1);
-		DFEVar tempB_1 = chainB.addCounter(/*loopLengthVal*/16,1);
+		CounterChain chain2_B = control.count.makeCounterChain(loop2Bool);
+		DFEVar burstCount2_B = chain2_B.addCounter(totalBurstsSyn,1);
+		DFEVar wordCount2_B = chain2_B.addCounter(wordsPerBurstSyn,1);
+		DFEVar temp2_B_1 = chain2_B.addCounter(loop2Length,1);
 
-		CounterChain chainSN = control.count.makeCounterChain(counterOne.getCount()>31 & loopA === 1 & n < M_S);
+		DFEVar M_S_u = M_S/Unroll_Factor;
+		CounterChain chainSN = control.count.makeCounterChain(loop2Bool & temp2_A_1 < M_S_u);
 		DFEVar burstCountSN = chainSN.addCounter(totalBurstsX,1);
-		DFEVar wordCountSN = chainSN.addCounter(wordsPerBurstX,1);
-		DFEVar tempSN = chainSN.addCounter(16,1);
-		//debug.simPrintf("stepA = %d, loopA = %d, stepB = %d, loopB = %d, n = %d, m = %d\n", stepA, loopA, stepB, loopB, n, m);
+		DFEVar wordCountSN = chainSN.addCounter(wordsPerBurstX/Unroll_Factor,1);
+		DFEVar tempSN = chainSN.addCounter(loop2Length,1);
+
+		//Third loop counter
+		CounterChain chain3_A = control.count.makeCounterChain(loop3Bool);
+		DFEVar burstCount3_A = chain3_A.addCounter(totalBurstsX,1);
+		DFEVar wordCount3_A = chain3_A.addCounter(wordsPerBurstX,1);
+		DFEVar temp3_A_1_max = (M_S+N)/Unroll_Factor;
+		DFEVar temp3_A_1 = chain3_A.addCounter(temp3_A_1_max,1);
+		DFEVar temp3_A_2 = chain3_A.addCounter(loop3Length,1);
+
+		CounterChain chain3_B = control.count.makeCounterChain(loop3Bool);
+		DFEVar burstCount3_B = chain3_B.addCounter(totalBurstsSyn,1);
+		DFEVar wordCount3_B = chain3_B.addCounter(wordsPerBurstSyn,1);
+		DFEVar temp3_B_1 = chain3_B.addCounter(loop3Length,1);
+
+		//End of Counters
+		DFEVar n_fin = loop2Bool ? temp2_A_1 : temp3_A_1;						// Only for loop > 1
+		DFEVar m_1 = loop1Bool ? burstCount1*wordsPerBurstX + wordCount1 : burstCount2_A*wordsPerBurstX + wordCount2_A;	//
+		DFEVar m_fin = loop3Bool ? burstCount3_A*wordsPerBurstX + wordCount3_A :  m_1;
+
+		DFEVar loopNumber = loop1Bool ? loop1Bool : constant.var(2);
+		DFEVar loopNumber_fin = loop3Bool ? constant.var(3) : loopNumber;
+
+		DFEVar burstCountA = loop1Bool ? burstCount1 : burstCount2_A;
+		burstCountA = loop3Bool ? burstCount3_A : burstCountA;
+
+		DFEVar wordCountA = loop1Bool ? wordCount1 : wordCount2_A;
+		wordCountA = loop3Bool ? wordCount3_A : wordCountA;
+
+		DFEVar burstCountB = loop2Bool ? burstCount2_B : burstCount3_B;
+		DFEVar wordCountB = loop3Bool ? wordCount3_B : wordCount2_B;
+
+		DFEVar loopCount = loop1Bool ? temp1.cast(type) : temp2_A_2.cast(type);
+		loopCount = loop3Bool ? temp3_A_2.cast(type) : loopCount;
 
 		DFEVar inputAddress = counterOne.getCount();
 
@@ -103,11 +163,11 @@ class SimulationKernel extends Kernel {
 		DFEVar stdp_p_array = io.input("stdp_params", double_type, stdp_in);
 
 		// Saving adex parameters in FMEM
-		Memory<DFEVar> adex_params = mem.alloc(dfeFloat(11,53), adex_params_size);
+		Memory<DFEVar> adex_params = mem.alloc(double_type, adex_params_size);
 		adex_params.write(adex_param_addr, adex_p_array, adex_in);
 
 		// Saving stdp parameters in FMEM
-		Memory<DFEVar> stdp_params = mem.alloc(dfeFloat(11,53), stdp_params_size);
+		Memory<DFEVar> stdp_params = mem.alloc(double_type, stdp_params_size);
 		stdp_params.write(stdp_param_addr, stdp_p_array, stdp_in);
 
 		DFEVar adex_add = constant.var(1).cast(dfeUInt(adex_params_addrBits));
@@ -167,62 +227,62 @@ class SimulationKernel extends Kernel {
 		stdp_add = constant.var(5).cast(dfeUInt(stdp_params_addrBits));
 		DFEVar Amax = stdp_params.read(stdp_add);
 
-		DFEVar t = stepA.cast(double_type) * defaultclock_dt;
+		DFEVar t = step.cast(double_type) * defaultclock_dt + start;
 		//t.simWatch("t");
-		DFEVar A_control = ~readingInput & (wordCountA === 0 & tempA_1 === 0 & tempA_2 === 0);
+		DFEVar A_control = wordCountA === 0 & ((loop1Bool & temp1.eq(0)) | (loop2Bool & temp2_A_1 === 0 & temp2_A_2 === 0) | (loop3Bool & temp3_A_1 === 0 & temp3_A_2 === 0));
 		//DFEVar burstCount_A = loopA === 0 ? burstCountA : burstCountA_2;
 		DFEVar burstCount_A = burstCountA;
 		LMemCommandStream.makeKernelOutput("XcmdStream",
 				A_control,                 // control
-				burstCount_A,                      // address (burstCount*burstSize)
+				burstCount_A.cast(dfeUInt(28)),                      // address (burstCount*burstSize)
 				constant.var(dfeUInt(8), 1),      // size	(number of bursts per read)
 				constant.var(dfeUInt(1), 0),      // inc	(inc in bursts of address)
 				constant.var(dfeUInt(1), 0),      // stream
 				constant.var(false));
 
-		DFEVar A_control_out = ~readingInput & (wordCountA === 0 & tempA_1 === 0 & tempA_2 === 0 & loopA.neq(2));
+		DFEVar A_control_out = wordCountA === 0 & ((loop1Bool & temp1.eq(0)) | (loop2Bool & temp2_A_1 === 0 & temp2_A_2 === 0));//~readingInput & (wordCountA === 0 & tempA_1 === 0 & tempA_2 === 0 & loopA.neq(2));
 		//DFEVar burstCount_A = loopA === 0 ? burstCountA : burstCountA_2;
 		DFEVar burstCount_A_out = burstCountA;
 		LMemCommandStream.makeKernelOutput("XOutcmdStream",
 				A_control_out,                 // control
-				burstCount_A_out,                      // address (burstCount*burstSize)
+				burstCount_A_out.cast(dfeUInt(28)),                      // address (burstCount*burstSize)
 				constant.var(dfeUInt(8), 1),      // size	(number of bursts per read)
 				constant.var(dfeUInt(1), 0),      // inc	(inc in bursts of address)
 				constant.var(dfeUInt(1), 0),      // stream
 				constant.var(false)/*loopA === 1 & burstCount_A_out === (totalBurstsX - 1) & stepA === steps-1*/);
 
-		DFEVar B_control = ~readingInput & (wordCountB === 0 & tempB_1 === 0 & loopB !== 0);
+		DFEVar B_control = wordCountB === 0 & ((loop2Bool & temp2_B_1 === 0) | (loop3Bool & temp3_B_1 === 0));//~readingInput & (wordCountB === 0 & tempB_1 === 0 & loopB !== 0);
 		DFEVar burstCount_B = burstCountB;
 		LMemCommandStream.makeKernelOutput("SynIncmdStream",
 				B_control,                 // control
-				totalBurstsX + burstCount_B,        // address
+				(totalBurstsX + burstCount_B).cast(dfeUInt(28)),        // address
 				constant.var(dfeUInt(8), 1),      // size
 				constant.var(dfeUInt(1), 0),      // inc
 				constant.var(dfeUInt(1), 0),      // stream
 				constant.var(false));
 
-		DFEVar B_control_o = ~readingInput & (wordCountB === 0 & tempB_1 === 0 & loopB !== 0);
+		DFEVar B_control_o = wordCountB === 0 & ((loop2Bool & temp2_B_1 === 0) | (loop3Bool & temp3_B_1 === 0));//~readingInput & (wordCountB === 0 & tempB_1 === 0 & loopB !== 0);
 		LMemCommandStream.makeKernelOutput("SynOutcmdStream",
 				B_control_o,                  // control
-				totalBurstsX + burstCount_B,     // address
+				(totalBurstsX + burstCount_B).cast(dfeUInt(28)),     // address
 				constant.var(dfeUInt(8), 1),       // size
 				constant.var(dfeUInt(1), 0),       // inc
 				constant.var(dfeUInt(1), 0),       // stream
-				/*constant.var(false)*/loopB === 2 & burstCount_B === (totalBurstsSyn - 1) & stepB === steps-1 & tempB_1 === 0);
+				/*constant.var(false)*/loop3Bool & burstCount_B === (totalBurstsSyn - 1) & step === steps-1 /*loopB === 2 & burstCount_B === (totalBurstsSyn - 1) & stepB === steps-1 & tempB_1 === 0*/);
 
-		DFEVar SN_control = ~readingInput & (wordCountSN === 0 & tempSN === 0 & loopA === 1 & n < M_S);
+		DFEVar SN_control = ~readingInput & (wordCountSN === 0 & tempSN === 0 & loop2Bool & n_fin < M_S_u);
 		//DFEVar burstCount_A = loopA === 0 ? burstCountA : burstCountA_2;
 		DFEVar burstCount_SN = burstCountSN;
 		LMemCommandStream.makeKernelOutput("SNcmdStream",
 				SN_control,                 // control
-				burstCount_SN,                      // address (burstCount*burstSize)
+				burstCount_SN.cast(dfeUInt(28)),                      // address (burstCount*burstSize)
 				constant.var(dfeUInt(8), 1),      // size	(number of bursts per read)
 				constant.var(dfeUInt(1), 0),      // inc	(inc in bursts of address)
 				constant.var(dfeUInt(1), 0),      // stream
 				constant.var(false));
 
-		DFEVector<DFEVar> syn = io.input("SynIn", SynapsesVector, ~readingInput & (loopB !== 0 & tempB_1 === 0));
-		DFEVector<DFEVar> x = io.input("X", vectorVars, ~readingInput & tempA_1 === 0 & tempA_2 === 0);
+		DFEVector<DFEVar> syn = io.input("SynIn", SynapsesVector, (loop2Bool & temp2_B_1 === 0) | (loop3Bool & temp3_B_1 === 0));
+		DFEVector<DFEVar> x = io.input("X", vectorVars, (loop1Bool & temp1.eq(0)) | (loop2Bool & temp2_A_1 === 0 & temp2_A_2 === 0) | (loop3Bool & temp3_A_1 === 0 & temp3_A_2 === 0));
 		DFEVector<DFEVar> x_copy = x;
 		//x_copy[0].simWatch("vt");
 		//syn[6].simWatch("u_in");
@@ -246,14 +306,13 @@ class SimulationKernel extends Kernel {
         DFEVar I_o = I;	// I must be read from memory in every timestep
         DFEVar Spike_o = Spike;
 
-        DFEVar control = vm_o > vt;
+        DFEVar control = vm_o > vt_o;
         //control.simWatch("control");
 
         vm_o = control ? Vr : vm_o;
         x_o = control ? x_o + b : x_o;
         vt_o = control ? vtmax : vt_o;
 		Spike_o = control ? constant.var(1).cast(double_type) : constant.var(0).cast(double_type);
-
 
 		DFEVector<DFEVar> x_o_arr = vectorVars.newInstance(this);
 
@@ -262,56 +321,104 @@ class SimulationKernel extends Kernel {
 		x_o_arr[2] <== I_o;
 		x_o_arr[3] <== x_o;
 		x_o_arr[4] <== Spike_o;
-		x_o_arr[5] <== Spike_o;
+		x_o_arr[5] <== x[5];
 
 		//x_o_arr.simWatch("x_o_arr");
 		// ************* SOLVE NEURONS END ****************** //
 
 		// ********** UPDATE SYNAPSES PRE START ************* //
-		DFEVar InputSpike = io.input("InputSpikes", dfeInt(32), ~readingInput /*& step === 0*/ & loopA === 1 & n >= M_S & m === 0 & tempA_2 === 0);
+		DFEVar InputSpike = io.input("InputSpikes", dfeUInt(8), loop2Bool & n_fin >= M_S_u & m_fin === 0 & temp2_A_2 === 0);
+		//(loop2Bool & n_fin >= M_S_u & m_fin === 0 & temp2_A_2 === 0).simWatch("Input_Spike_Enable");
+		//InputSpike.simWatch("InputSpike");
 		// Saving Input Spikes in FMEM
-		int max_N = 1000;
+		int max_N = 20352;
 		int max_N_bits = MathUtils.bitsToAddress(max_N);
 
-		DFEVar InputSpikeAddr = n.cast(dfeUInt(max_N_bits));
-		Memory<DFEVar> InputSpikes = mem.alloc(type, max_N);
-		InputSpikes.write(InputSpikeAddr, InputSpike, m === 0 & loopA === 1);
+		DFEVar InputSpikeAddr = n_fin.cast(dfeUInt(max_N_bits)); // PROBABLY THIS SHOULD BE (n_fin-M_S_u).cast(dfeUInt(max_N_bits));
+		Memory<DFEVar> InputSpikes = mem.alloc(dfeUInt(8), max_N);
+		InputSpikes.write(InputSpikeAddr, InputSpike, /*m_fin === 0 & loop2Bool*/loop2Bool & n_fin >= M_S_u & m_fin === 0 & temp2_A_2 === 0);
 
-		DFEVar spike = (m === 0) ? InputSpike : InputSpikes.read(InputSpikeAddr);
+		DFEVar spike = (m_fin === 0) ? InputSpike : InputSpikes.read(InputSpikeAddr);
+		//spike.simWatch("spike");
+		DFEVector<DFEVar> spike_vec = InputSpikesVector.newInstance(this);
+		spike_vec[0] <== (spike & 16)>>4;
+		spike_vec[1] <== (spike & 1);
+		//spike_vec[0].simWatch("spke_vec0");
+		//spike_vec[1].simWatch("spke_vec1");
 
-		DFEVector<DFEVar> SourceNeuron = io.input("SourceNeurons", vectorVars, ~readingInput /*& step === 0*/ & loopA === 1 & tempSN === 0 & n < M_S);
+		DFEVector<DFEVar> SourceNeuron = io.input("SourceNeurons", vectorVarsSN, loop2Bool & tempSN === 0 & n_fin < M_S_u);
 		//SourceNeuron.simWatch("sourceneuron");
+		//DFEVar control_pre = ((n_fin<M_S & SourceNeuron[4] === 1) | (n_fin >= M_S & spike === 1)) & syn[0] === 1;
+		DFEVector<DFEVar> control_pre = VarVectorInt.newInstance(this);
+		for(int i = 0; i < Unroll_Factor; i++){
+			control_pre[i] <== ((n_fin<M_S_u & SourceNeuron[i*6+4] === 1) | (n_fin >= M_S_u & spike_vec[i] === 1)) & syn[i*12] === 1 & loop2Bool;
+		}
+		//control_pre[0].simWatch("control_pre0");
+		//control_pre[1].simWatch("control_pre1");
+		//DFEVar FFp = control_pre ? syn[2] * KernelMath.exp(-(-syn[9] + t)/tau_FFp) : syn[2];
+		//DFEVar FBn = control_pre ? syn[4] * KernelMath.exp(-(-syn[9] + t)/tau_FBn) : syn[4];
 
-		DFEVar FFp = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[2] * KernelMath.exp(-(-syn[9] + t)/tau_FFp) : syn[2];
-		DFEVar FBn = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[4] * KernelMath.exp(-(-syn[9] + t)/tau_FBn) : syn[4];
-		DFEVar control_pre = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1;
 		//control_pre.simWatch("control_pre");
-		DFEVar u = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[7] + (-syn[7] + syn[6]) * KernelMath.exp(-(-syn[9] + t)/tau_u) : syn[6];
+		//DFEVar u = control_pre ? syn[7] + (-syn[7] + syn[6]) * KernelMath.exp(-(-syn[9] + t)/tau_u) : syn[6];
 		//u.simWatch("u");
-		DFEVar FBp = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[3] * KernelMath.exp(-(-syn[9] + t)/tau_FBp) : syn[3];
-		DFEVar R = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? (syn[5] - 1) * KernelMath.exp(-(-syn[9] + t)/tau_r) + 1 : syn[5];
-		DFEVar targetI = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? s * syn[8] * R * u : syn[10];
+		//DFEVar FBp = control_pre ? syn[3] * KernelMath.exp(-(-syn[9] + t)/tau_FBp) : syn[3];
+		//DFEVar R = control_pre ? (syn[5] - 1) * KernelMath.exp(-(-syn[9] + t)/tau_r) + 1 : syn[5];
+		//DFEVar targetI = control_pre ? s * syn[8] * R * u : syn[10];
 		//targetI.simWatch("targetI");
-		DFEVar U = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? syn[7] + etaU * (-AFBn * FBn * FBp + AFBp * FBp * FFp) : syn[7];
-		U = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 & (U < Umin) ? Umin : U;	// Needs conditions
-		U = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 & (U > Umax) ? Umax : U;	// Needs conditions
-		DFEVar w = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? U * syn[8] : syn[1];
-		FFp = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? FFp + 1 : FFp;				// Needs conditions
-		R = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? R - R * u : R;				// Needs conditions
-		u = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? u + U * (1-u) : u;			// Needs conditions
+		//DFEVar U = control_pre ? syn[7] + etaU * (-AFBn * FBn * FBp + AFBp * FBp * FFp) : syn[7];
+		//U = control_pre & (U < Umin) ? Umin : U;
+		//U = control_pre & (U > Umax) ? Umax : U;
+		//DFEVar w = control_pre ? U * syn[8] : syn[1];
+		//FFp = control_pre ? FFp + 1 : FFp;
+		//R = control_pre ? R - R * u : R;
+		//u = control_pre ? u + U * (1-u) : u;
 		//u.simWatch("u");
-		DFEVar lastupdate = ((n<M_S & SourceNeuron[4] === 1) | (n >= M_S & spike === 1)) & syn[0] === 1 ? t : syn[9];
+		//DFEVar lastupdate = control_pre ? t : syn[9];
+
+		DFEVector<DFEVar> FFp = VarVector.newInstance(this);
+		DFEVector<DFEVar> FFp_t = VarVector.newInstance(this);
+		DFEVector<DFEVar> FBn = VarVector.newInstance(this);
+		DFEVector<DFEVar> u = VarVector.newInstance(this);
+		DFEVector<DFEVar> u_t = VarVector.newInstance(this);
+		DFEVector<DFEVar> FBp = VarVector.newInstance(this);
+		DFEVector<DFEVar> R = VarVector.newInstance(this);
+		DFEVector<DFEVar> R_t = VarVector.newInstance(this);
+		DFEVector<DFEVar> targetI = VarVector.newInstance(this);
+		DFEVector<DFEVar> U = VarVector.newInstance(this);
+		DFEVector<DFEVar> U_t = VarVector.newInstance(this);
+		DFEVector<DFEVar> U_tt = VarVector.newInstance(this);
+		DFEVector<DFEVar> w = VarVector.newInstance(this);
+		DFEVector<DFEVar> lastupdate = VarVector.newInstance(this);
+
+		for(int i = 0; i < Unroll_Factor; i++){
+			FFp[i] <== control_pre[i] ? syn[i*12+2] * KernelMath.exp(-(-syn[i*12+9] + t)/tau_FFp) : syn[i*12+2];
+			FBn[i] <== control_pre[i] ? syn[i*12+4] * KernelMath.exp(-(-syn[i*12+9] + t)/tau_FBn) : syn[i*12+4];
+			u[i] <== control_pre[i] ? syn[i*12+7] + (-syn[i*12+7] + syn[i*12+6]) * KernelMath.exp(-(-syn[i*12+9] + t)/tau_u) : syn[i*12+6];
+			FBp[i] <== control_pre[i] ? syn[i*12+3] * KernelMath.exp(-(-syn[i*12+9] + t)/tau_FBp) : syn[i*12+3];
+			R[i] <== control_pre[i] ? (syn[i*12+5] - 1) * KernelMath.exp(-(-syn[i*12+9] + t)/tau_r) + 1 : syn[i*12+5];
+			targetI[i] <== control_pre[i] ? s * syn[i*12+8] * R[i] * u[i] : syn[i*12+10];
+			U[i] <== control_pre[i] ? syn[i*12+7] + etaU * (-AFBn * FBn[i] * FBp[i] + AFBp * FBp[i] * FFp[i]) : syn[i*12+7];
+			U_t[i] <== control_pre[i] & (U[i] < Umin) ? Umin : U[i];
+			U_tt[i] <== control_pre[i] & (U_t[i] > Umax) ? Umax : U_t[i];
+			w[i] <== control_pre[i] ? U_tt[i] * syn[i*12+8] : syn[i*12+1];
+			FFp_t[i] <== control_pre[i] ? FFp[i] + 1 : FFp[i];
+			R_t[i] <== control_pre[i] ? R[i] - R[i] * u[i] : R[i];
+			u_t[i] <== control_pre[i] ? u[i] + U_tt[i] * (1-u[i]) : u[i];
+			lastupdate[i] <== control_pre[i] ? t : syn[i*12+9];
+		}
 
 		DFEVector<DFEVar> x_t = vectorVars.newInstance(this);
 		DFEVector<DFEVar> x_tt = vectorVars.newInstance(this);
 		DFEVector<DFEVar> x_out_p = vectorVars.newInstance(this);
-
-		x_t = n === 0 ? x_copy : stream.offset(x_out_p,-16/*loopLength*/);
+		//DFEVector<DFEVar> tempI = vectorVars.newInstance(this);
+		x_t = n_fin === 0 ? x_copy : stream.offset(x_out_p,-loop2Length/*loopLength*/);
+		DFEVar tempI = control_pre[0] ? targetI[0] : x_t[2];
+		DFEVar tempI_t = control_pre[1] ? targetI[1] : tempI;
 		//x_t[2].simWatch("x_t_I");
 		//x_tt = loop_counter === 0 ? x_t : x_tt;
 		x_out_p[0] <== x_t[0];
 		x_out_p[1] <== x_t[1];
-		x_out_p[2] <== (syn[0] === 1 & ((n < M_S & SourceNeuron[4] === 1) | (n>= M_S & spike === 1))) ? targetI : x_t[2];
+		x_out_p[2] <== tempI_t;
 		//x_out_p[2].simWatch("x_o_I");
 		x_out_p[3] <== x_t[3];
 		x_out_p[4] <== x_t[4];
@@ -319,79 +426,185 @@ class SimulationKernel extends Kernel {
 		//x_out_p[2].simWatch("xO_i");
 		//x_t[2].simWatch("xT_i");
 
+
+
+
+
 		DFEVector<DFEVar> syn_o_p = SynapsesVector.newInstance(this);
-		syn_o_p[0] <== syn[0];
-		syn_o_p[1] <== w;
-		syn_o_p[2] <== FFp;
-		syn_o_p[3] <== FBp;
-		syn_o_p[4] <== FBn;
-		syn_o_p[5] <== R;
-		syn_o_p[6] <== u;
-		syn_o_p[7] <== U;
-		syn_o_p[8] <== syn[8];
-		syn_o_p[9] <== lastupdate;
-		syn_o_p[10] <== targetI;
-		syn_o_p[11] <== syn[11];
+		//syn_o_p[0] <== syn[0];
+		//syn_o_p[1] <== w;
+		//syn_o_p[2] <== FFp;
+		//syn_o_p[3] <== FBp;
+		//syn_o_p[4] <== FBn;
+		//syn_o_p[5] <== R;
+		//syn_o_p[6] <== u;
+		//syn_o_p[7] <== U;
+		//syn_o_p[8] <== syn[8];
+		//syn_o_p[9] <== lastupdate;
+		//syn_o_p[10] <== targetI;
+		//syn_o_p[11] <== syn[11];
+		for(int i = 0; i < Unroll_Factor; i++){
+			syn_o_p[i*12] <== syn[i*12];
+			syn_o_p[i*12+1] <== w[i];
+			syn_o_p[i*12+2] <== FFp_t[i];
+			syn_o_p[i*12+3] <== FBp[i];
+			syn_o_p[i*12+4] <== FBn[i];
+			syn_o_p[i*12+5] <== R_t[i];
+			syn_o_p[i*12+6] <== u_t[i];
+			syn_o_p[i*12+7] <== U_tt[i];
+			syn_o_p[i*12+8] <== syn[i*12+8];
+			syn_o_p[i*12+9] <== lastupdate[i];
+			syn_o_p[i*12+10] <== targetI[i];
+			syn_o_p[i*12+11] <== syn[i*12+11];
+		}
 		// ********** UPDATE SYNAPSES PRE END ************** //
 
 		// ********** UPDATE SYNAPSES POST START *********** //
 
 		// loop = 0 calculations
-		DFEVar FFp_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[2] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FFp) : syn_o_p[2];
-		DFEVar FBn_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[4] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FBn) : syn_o_p[4];
-		DFEVar u_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[7] + (-syn_o_p[7] + syn_o_p[6]) * KernelMath.exp(-(-syn_o_p[9] + t)/tau_u) : syn_o_p[6];
+		//DFEVar control_post_1 = x[4] === 1 & syn[0] === 1 & loop2Bool;
+		//DFEVar FFp_po = control_post_1 ? syn_o_p[2] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FFp) : syn_o_p[2];
+		//DFEVar FBn_po = control_post_1 ? syn_o_p[4] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FBn) : syn_o_p[4];
+		//DFEVar u_po = control_post_1 ? syn_o_p[7] + (-syn_o_p[7] + syn_o_p[6]) * KernelMath.exp(-(-syn_o_p[9] + t)/tau_u) : syn_o_p[6];
 //		u.cast(double_type).simWatch("u");
-		DFEVar FBp_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[3] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FBp) : syn_o_p[3];
-		DFEVar R_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? (syn_o_p[5] - 1) * KernelMath.exp(-(-syn_o_p[9] + t)/tau_r) + 1 : syn_o_p[5];
-		DFEVar A_po = x[4] === 1 & syn[0] === 1 & loopA === 1 ? syn_o_p[8] + etaA * (AFFp * FFp_po * FBn_po) : syn_o_p[8];
+		//DFEVar FBp_po = control_post_1 ? syn_o_p[3] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FBp) : syn_o_p[3];
+		//DFEVar R_po = control_post_1 ? (syn_o_p[5] - 1) * KernelMath.exp(-(-syn_o_p[9] + t)/tau_r) + 1 : syn_o_p[5];
+		//DFEVar A_po = control_post_1 ? syn_o_p[8] + etaA * (AFFp * FFp_po * FBn_po) : syn_o_p[8];
+		DFEVector<DFEVar> control_post_1 = VarVectorInt.newInstance(this);
+		DFEVector<DFEVar> FFp_po = VarVector.newInstance(this);
+		DFEVector<DFEVar> FBn_po = VarVector.newInstance(this);
+		DFEVector<DFEVar> u_po = VarVector.newInstance(this);
+		DFEVector<DFEVar> FBp_po = VarVector.newInstance(this);
+		DFEVector<DFEVar> R_po = VarVector.newInstance(this);
+		DFEVector<DFEVar> A_po = VarVector.newInstance(this);
+		for(int i = 0; i < Unroll_Factor; i++){
+			control_post_1[i] <== x[4] === 1 & syn[i*12] === 1 & loop2Bool;
+		}
+		//x[4].simWatch("x_spike");
+		//syn[0].simWatch("conn0");
+		//syn[12].simWatch("conn1");
+		//loop2Bool.simWatch("loop2Bool");
+		//control_post_1[0].simWatch("control_post_1_0");
+		//control_post_1[1].simWatch("control_post_1_1");
+		for(int i = 0; i < Unroll_Factor; i++){
+			FFp_po[i] <== control_post_1[i] ? syn_o_p[i*12+2] * KernelMath.exp(-(-syn_o_p[i*12+9] + t)/tau_FFp) : syn_o_p[i*12+2];
+			FBn_po[i] <== control_post_1[i] ? syn_o_p[i*12+4] * KernelMath.exp(-(-syn_o_p[i*12+9] + t)/tau_FBn) : syn_o_p[i*12+4];
+			u_po[i] <== control_post_1[i] ? syn_o_p[i*12+7] + (-syn_o_p[i*12+7] + syn_o_p[i*12+6]) * KernelMath.exp(-(-syn_o_p[i*12+9] + t)/tau_u) : syn_o_p[i*12+6];
+			FBp_po[i] <== control_post_1[i] ? syn_o_p[i*12+3] * KernelMath.exp(-(-syn_o_p[i*12+9] + t)/tau_FBp) : syn_o_p[i*12+3];
+			R_po[i] <== control_post_1[i] ? (syn_o_p[i*12+5] - 1) * KernelMath.exp(-(-syn_o_p[i*12+9] + t)/tau_r) + 1 : syn_o_p[i*12+5];
+			A_po[i] <== control_post_1[i] ? syn_o_p[i*12+8] + etaA * (AFFp * FFp_po[i] * FBn_po[i]) : syn_o_p[i*12+8];
+		}
 		// loop = 0 calculations finish
 
 		DFEVector<DFEVar> syn_o_po = SynapsesVector.newInstance(this);
-		syn_o_po[0] <== syn[0];
-		syn_o_po[1] <== w;
-		syn_o_po[2] <== FFp_po;
-		syn_o_po[3] <== FBp_po;
-		syn_o_po[4] <== FBn_po;
-		syn_o_po[5] <== R_po;
-		syn_o_po[6] <== u_po;
-		syn_o_po[7] <== U;
-		syn_o_po[8] <== A_po;
-		syn_o_po[9] <== lastupdate;
-		syn_o_po[10] <== targetI;
-		syn_o_po[11] <== syn[11];
+		//syn_o_po[0] <== syn[0];
+		//syn_o_po[1] <== w;
+		//syn_o_po[2] <== FFp_po;
+		//syn_o_po[3] <== FBp_po;
+		//syn_o_po[4] <== FBn_po;
+		//syn_o_po[5] <== R_po;
+		//syn_o_po[6] <== u_po;
+		//syn_o_po[7] <== U;
+		//syn_o_po[8] <== A_po;
+		//syn_o_po[9] <== lastupdate;
+		//syn_o_po[10] <== targetI;
+		//syn_o_po[11] <== syn[11];
+
+		for(int i = 0; i < Unroll_Factor; i++){
+			syn_o_po[i*12] <== syn[i*12];
+			syn_o_po[i*12+1] <== w[i];
+			syn_o_po[i*12+2] <== FFp_po[i];
+			syn_o_po[i*12+3] <== FBp_po[i];
+			syn_o_po[i*12+4] <== FBn_po[i];
+			syn_o_po[i*12+5] <== R_po[i];
+			syn_o_po[i*12+6] <== u_po[i];
+			syn_o_po[i*12+7] <== U_tt[i];
+			syn_o_po[i*12+8] <== A_po[i];
+			syn_o_po[i*12+9] <== lastupdate[i];
+			syn_o_po[i*12+10] <== targetI[i];
+			syn_o_po[i*12+11] <== syn[i*12+11];
+		}
 
 		// Mean calculation part
-		DFEVar carriedSum = double_type.newInstance(this);
-		DFEVar carriedNum = double_type.newInstance(this);
+		DFEVar carriedSum = dfeFloat(11,53).newInstance(this);
+		DFEVar carriedNum = dfeFloat(11,53).newInstance(this);
 
-		DFEVar sum_t = m === 0 & n === 0 & loopA === 1 ? constant.var(0) : carriedSum;
-		DFEVar num_t = m === 0 & n === 0 & loopA === 1 ? constant.var(0) : carriedNum;
+		DFEVar sum_t = m_fin === 0 & n_fin === 0 & loop2Bool ? constant.var(0) : carriedSum;
+		DFEVar num_t = m_fin === 0 & n_fin === 0 & loop2Bool ? constant.var(0) : carriedNum;
 
-		sum_t = x[4] === 1 & syn[0] === 1 & loopA === 1 ? sum_t + AFFp * FFp_po * FBn_po : sum_t;
+		//sum_t = control_post_1 ? sum_t + AFFp * FFp_po * FBn_po : sum_t;
+
 		//FFp_po.simWatch("FFp_po");
 		//FBn_po.simWatch("FBn_po");
 		//sum_t.simWatch("sum_t");
-		num_t = x[4] === 1 & syn[0] === 1 & loopA === 1 ? num_t + 1 : num_t;
-		carriedSum <== stream.offset(sum_t, -16/*loopLength*/);
-		carriedNum <== stream.offset(num_t, -16/*loopLength*/);
+		//num_t = control_post_1 ? num_t + 1 : num_t;
+		DFEVector<DFEVar> add = VarVectorD.newInstance(this);
+		DFEVector<DFEVar> add_t = VarVectorD.newInstance(this);
+		DFEVector<DFEVar> num = VarVectorD.newInstance(this);
+		for(int i = 0; i < Unroll_Factor; i++){
+			add_t[i] <== (AFFp * FFp_po[i] * FBn_po[i]).cast(dfeFloat(11,53));
+		}
+		for(int i = 0; i < Unroll_Factor; i++){
+			add[i] <== control_post_1[i] ? add_t[i] : constant.var(0);
+			num[i] <== control_post_1[i].cast(dfeFloat(11,53));
+		}
+		DFEVar sum_add = add[0] + add[1];
+		DFEVar num_add = num[0] + num[1];
+		sum_t = sum_t + sum_add;
+		//sum_t.cast(double_type).simWatch("sum_t");
+		num_t = num_t + num_add;
+
+		carriedSum <== stream.offset(sum_t, -loop2Length/*loopLength*/);
+		carriedNum <== stream.offset(num_t, -loop2Length/*loopLength*/);
+
 		DFEVar mean_t = sum_t/num_t;
 		//mean_t.simWatch("mean_t");
-		DFEVar mean_fin = loopA === 2 ? mean_t : constant.var(0);
-		//mean_fin.simWatch("mean_fin");
+		DFEVar mean_fin = loop3Bool ? mean_t : constant.var(0);
+		//mean_fin.cast(double_type).simWatch("mean_fin");
 		// Mean calculation part finish
 
 		// loop = 1 calculations
-		DFEVar temp = etaA * 0.5 * mean_fin;
-		DFEVar A_po_1 = x[4] === 1 & syn[0] === 1 & loopA === 2 ? syn[8] - temp : syn[8];
+		//DFEVar control_post_2 = x[4] === 1 & syn[0] === 1 & loop3Bool;
+		//DFEVar temp = etaA * 0.5 * mean_fin;
+		//DFEVar A_po_1 = control_post_2 ? syn[8] - temp : syn[8];
 		//A_1.simWatch("A_1");
-		DFEVar A_po_t = A_po_1 < Amin & x[4] === 1 & syn[0] === 1 & loopA === 2 ? Amin : A_po_1;
+		//DFEVar A_po_t = A_po_1 < Amin & control_post_2 ? Amin : A_po_1;
 		//A_t.simWatch("A_t");
-		DFEVar A_po_tt = A_po_t > Amax & x[4] === 1 & syn[0] === 1 & loopA === 2 ? Amax : A_po_t;
+		//DFEVar A_po_tt = A_po_t > Amax & control_post_2 ? Amax : A_po_t;
 		//A_tt.simWatch("A_tt");
-		DFEVar w_po =  x[4] === 1 & syn[0] === 1 & loopA === 2 ? syn[7] * A_po_tt : syn[1];
-		DFEVar FBp_po_1 =  x[4] === 1 & syn[0] === 1 & loopA === 2 ? syn[3] + 1 : syn[3];
-		DFEVar FBn_po_1 =  x[4] === 1 & syn[0] === 1 & loopA === 2 ? syn[4] + 1 : syn[4];
-		DFEVar lastupdate_po = x[4] === 1 & syn[0] === 1 & loopA === 2 ? t : syn[9];
+		//DFEVar w_po =  control_post_2 ? syn[7] * A_po_tt : syn[1];
+		//DFEVar FBp_po_1 =  control_post_2 ? syn[3] + 1 : syn[3];
+		//DFEVar FBn_po_1 =  control_post_2 ? syn[4] + 1 : syn[4];
+		//DFEVar lastupdate_po = control_post_2 ? t : syn[9];
+
+		DFEVector<DFEVar> control_post_2 = VarVectorInt.newInstance(this);
+		DFEVector<DFEVar> temp = VarVector.newInstance(this);
+		DFEVector<DFEVar> A_po_1 = VarVector.newInstance(this);
+		DFEVector<DFEVar> A_po_t = VarVector.newInstance(this);
+		DFEVector<DFEVar> A_po_tt = VarVector.newInstance(this);
+		DFEVector<DFEVar> w_po = VarVector.newInstance(this);
+		DFEVector<DFEVar> FBp_po_1 = VarVector.newInstance(this);
+		DFEVector<DFEVar> FBn_po_1 = VarVector.newInstance(this);
+		DFEVector<DFEVar> lastupdate_po = VarVector.newInstance(this);
+		for(int i = 0; i < Unroll_Factor; i++){
+			control_post_2[i] <== x[4] === 1 & syn[i*12] === 1 & loop3Bool;
+		}
+		//control_post_2[0].simWatch("control_post_2_0");
+		//control_post_2[1].simWatch("control_post_2_1");
+		for(int i = 0; i < Unroll_Factor; i++){
+			temp[i] <== etaA * 0.5 * mean_fin.cast(double_type);
+			A_po_1[i] <== control_post_2[i] ? syn[i*12+8] - temp[i] : syn[i*12+8];
+			A_po_t[i] <== A_po_1[i] < Amin & control_post_2[i] ? Amin : A_po_1[i];
+			A_po_tt[i] <== A_po_t[i] > Amax & control_post_2[i] ? Amax : A_po_t[i];
+			w_po[i] <==  control_post_2[i] ? syn[i*12+7] * A_po_tt[i] : syn[i*12+1];
+			FBp_po_1[i] <==  control_post_2[i] ? syn[i*12+3] + 1 : syn[i*12+3];
+			FBn_po_1[i] <==  control_post_2[i] ? syn[i*12+4] + 1 : syn[i*12+4];
+			lastupdate_po[i] <== control_post_2[i] ? t : syn[i*12+9];
+		}
+		//syn[8].cast(double_type).simWatch("A_po_0");
+		//syn[12+8].cast(double_type).simWatch("A_po_1");
+		//A_po_1[0].cast(double_type).simWatch("A_po_1_0");
+		//A_po_1[1].cast(double_type).simWatch("A_po_1_1");
 		// loop = 1 calculations finish
 
 		// Connecting Output
@@ -401,29 +614,42 @@ class SimulationKernel extends Kernel {
 //		A_fin.cast(double_type).simWatch("A_fin");
 		DFEVector<DFEVar> syn_o = SynapsesVector.newInstance(this);
 
-		syn_o[0] <== syn[0];
-		syn_o[1] <== w_po;
-		syn_o[2] <== syn[2];
-		syn_o[3] <== FBp_po_1;
-		syn_o[4] <== FBn_po_1;
-		syn_o[5] <== syn[5];
-		syn_o[6] <== syn[6];
+		//syn_o[0] <== syn[0];
+		//syn_o[1] <== w_po;
+		//syn_o[2] <== syn[2];
+		//syn_o[3] <== FBp_po_1;
+		//syn_o[4] <== FBn_po_1;
+		//syn_o[5] <== syn[5];
+		//syn_o[6] <== syn[6];
 		//syn[6].simWatch("syn_6");
 		//syn_o[6].simWatch("syn_o_6");
-		syn_o[7] <== syn[7];
-		syn_o[8] <== A_po_tt;
-		syn_o[9] <== lastupdate_po;
-		syn_o[10] <== syn[10];
-		syn_o[11] <== syn[11];
-
+		//syn_o[7] <== syn[7];
+		//syn_o[8] <== A_po_tt;
+		//syn_o[9] <== lastupdate_po;
+		//syn_o[10] <== syn[10];
+		//syn_o[11] <== syn[11];
+		for(int i = 0; i < Unroll_Factor; i++){
+			syn_o[i*12] <== syn[i*12];
+			syn_o[i*12+1] <== w_po[i];
+			syn_o[i*12+2] <== syn[i*12+2];
+			syn_o[i*12+3] <== FBp_po_1[i];
+			syn_o[i*12+4] <== FBn_po_1[i];
+			syn_o[i*12+5] <== syn[i*12+5];
+			syn_o[i*12+6] <== syn[i*12+6];
+			syn_o[i*12+7] <== syn[i*12+7];
+			syn_o[i*12+8] <== A_po_tt[i];
+			syn_o[i*12+9] <== lastupdate_po[i];
+			syn_o[i*12+10] <== syn[i*12+10];
+			syn_o[i*12+11] <== syn[i*12+11];
+		}
 		// ********** UPDATE SYNAPSES POST END ************* //
-		DFEVector<DFEVar> x_out = loopA === 0 ? x_o_arr : x_out_p;
+		DFEVector<DFEVar> x_out = loop1Bool ? x_o_arr : x_out_p;
 		//x_out[2].simWatch("x_out_I");
-		DFEVar x_control_out = ~readingInput & ((loopA === 0 & tempA_1 === 0) | (loopA === 1 & tempA_1 === tempA_1_max-1)) & tempA_2 === 15;
+		DFEVar x_control_out = (loop1Bool & temp1 === 0) | (loop2Bool & temp2_A_1 === temp2_A_1_max-1 & temp2_A_2 === loop2Length-1) ;
 		//x_control_out.simWatch("x_control_out");
 		io.output("XOut", x_out, vectorVars, x_control_out);
-		DFEVector<DFEVar> syn_out = loopB === 1 ? syn_o_po : syn_o;
-		DFEVar syn_o_control = ~readingInput & (tempB_1 === 15/*loopLengthVal-1*/ & loopB.neq(0));
+		DFEVector<DFEVar> syn_out = loop2Bool ? syn_o_po : syn_o;
+		DFEVar syn_o_control = (loop2Bool & temp2_B_1 === loop2Length-1) | (loop3Bool & temp3_B_1 === loop3Length-1);
 		//syn_o_control.simWatch("syn_o_control");
 		io.output("SynOut", syn_out, SynapsesVector, syn_o_control);
 	}
