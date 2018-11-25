@@ -44,7 +44,7 @@ make RUNRULES="Simulation" startsim // And then follow the instructions of the o
 ### For DFE
 
 ```
-./../RunRules/Simulation/Simulation Number_of_Timesteps N_S N_Group_S N_Group_T SpikeInt WriteEn RunCPU AllConnected
+./Simulation Number_of_Timesteps N_S N_Group_S N_Group_T SpikeInt WriteEn RunCPU AllConnected
 ```
 Number of Timesteps: Number of Simulation Steps\
 N_S: Number of Input Neurons\
@@ -67,7 +67,7 @@ Writing output in file for every timestep\
 All Input Neurons connected with all the AdEx Neurons\
 No running on CPU
 ```
-./../RunRules/Simulation/Simulation 1000 10 0 10 1 1 0 1
+./Simulation 1000 10 0 10 1 1 0 1
 ```
 
 ## Example 2
@@ -82,7 +82,7 @@ Writing output in file for every timestep\
 Specific connections (Synapses) between AdEx Neurons specified in "connections.txt"\
 No running on CPU
 ```
-./../RunRules/Simulation/Simulation 1000 0 10 10 1 1 0 0
+./Simulation 1000 0 10 10 1 1 0 0
 ```
 
 The file "connections.txt" that specifies the connections (Synapses) between Neurons must be formated as the example file in the repository, as an Adjacency Matrix.\
