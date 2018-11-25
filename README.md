@@ -16,6 +16,7 @@ The following instructions are needed to compile the program.
 ### For Simulation
 
 ```
+cd /CPUCode
 export PATH=$HOME/bin:/opt/altera/13.1/quartus/bin/:$PATH
 source "/opt/maxcompiler2017.2.1/settings.sh"
 make RUNRULES="Simulation"
@@ -24,7 +25,7 @@ make RUNRULES="Simulation"
 ### For DFE
 
 ```
-cd ~/CPUCode
+cd /CPUCode
 export PATH=$HOME/bin:/opt/altera/13.1/quartus/bin/:$PATH
 source "/opt/maxcompiler2017.2.1/settings.sh"
 make RUNRULES="DFE"
@@ -37,6 +38,7 @@ There are two options to run the program. The first one is running on the machin
 ### For Simulation
 
 ```
+cd /CPUCode
 source "/opt/maxcompiler2017.2.1/settings.sh"
 make RUNRULES="Simulation" startsim // And then follow the instructions of the output of this instruction
 ./../RunRules/Simulation/Simulation Number_of_Timesteps N_S N_Group_S N_Group_T SpikeInt WriteEn AllConnected RunCPU
