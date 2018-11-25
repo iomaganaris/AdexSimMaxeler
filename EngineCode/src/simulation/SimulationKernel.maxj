@@ -24,8 +24,7 @@ class SimulationKernel extends Kernel {
 
 	protected SimulationKernel(KernelParameters parameters) {
 		super(parameters);
-		//PipelinedOps op = PipelinedOps.ALL;
-		//optimization.pushPipeliningFactor(0.8, op); //.pushPipeliningFactor(0.8);
+
 		int Unroll_Factor = 2;
 		DFEVectorType<DFEVar> vectorVars =
 			new DFEVectorType<DFEVar>(double_type, 6); // The real size of the vector is 5 but the program would not compile
@@ -64,7 +63,8 @@ class SimulationKernel extends Kernel {
 		DFEVar wordsPerBurstX = io.scalarInput("wordsPerBurstX",dfeUInt(64));
 		DFEVar totalBurstsSyn = io.scalarInput("totalBurstsSyn",dfeUInt(64));
 		DFEVar wordsPerBurstSyn = io.scalarInput("wordsPerBurstSyn",dfeUInt(64));
-		//debug.simPrintf("totalBurstsX = %d, wordsPerBurstX = %d, totalBurstsSyn = %d, wordsPerBurstSyn = %d, steps = %d\n", totalBurstsX, wordsPerBurstX, totalBurstsSyn, wordsPerBurstSyn, steps);
+		DFEVar WriteEn = io.scalarInput("WriteEn",dfeUInt(32));
+		DFEVar WriteStep = io.scalarInput("WriteStep",dfeUInt(32));
 
 		int adex_params_size = 16; // for allignment
 		int adex_params_addrBits = MathUtils.bitsToAddress(adex_params_size);
@@ -77,7 +77,6 @@ class SimulationKernel extends Kernel {
 		.withInc(1)
 		.withWrapMode(WrapMode.STOP_AT_MAX);
 		Counter counterOne = control.count.makeCounter(paramsOne);
-		//counterOne.getCount().simWatch("counterOne");
 
 		// Counters for reading Neurons and Synapses
 
@@ -195,7 +194,6 @@ class SimulationKernel extends Kernel {
 		adex_add = constant.var(13).cast(dfeUInt(adex_params_addrBits));
 		DFEVar defaultclock_dt = adex_params.read(adex_add);
 
-
 		DFEVar stdp_add = constant.var(21).cast(dfeUInt(stdp_params_addrBits));
 		DFEVar tau_FFp = stdp_params.read(stdp_add);
 		stdp_add = constant.var(17).cast(dfeUInt(stdp_params_addrBits));
@@ -228,9 +226,8 @@ class SimulationKernel extends Kernel {
 		DFEVar Amax = stdp_params.read(stdp_add);
 
 		DFEVar t = step.cast(double_type) * defaultclock_dt + start;
-		//t.simWatch("t");
+
 		DFEVar A_control = wordCountA === 0 & ((loop1Bool & temp1.eq(0)) | (loop2Bool & temp2_A_1 === 0 & temp2_A_2 === 0) | (loop3Bool & temp3_A_1 === 0 & temp3_A_2 === 0));
-		//DFEVar burstCount_A = loopA === 0 ? burstCountA : burstCountA_2;
 		DFEVar burstCount_A = burstCountA;
 		LMemCommandStream.makeKernelOutput("XcmdStream",
 				A_control,                 // control
@@ -241,7 +238,6 @@ class SimulationKernel extends Kernel {
 				constant.var(false));
 
 		DFEVar A_control_out = wordCountA === 0 & ((loop1Bool & temp1.eq(0)) | (loop2Bool & temp2_A_1 === 0 & temp2_A_2 === 0));//~readingInput & (wordCountA === 0 & tempA_1 === 0 & tempA_2 === 0 & loopA.neq(2));
-		//DFEVar burstCount_A = loopA === 0 ? burstCountA : burstCountA_2;
 		DFEVar burstCount_A_out = burstCountA;
 		LMemCommandStream.makeKernelOutput("XOutcmdStream",
 				A_control_out,                 // control
@@ -271,7 +267,6 @@ class SimulationKernel extends Kernel {
 				/*constant.var(false)*/loop3Bool & burstCount_B === (totalBurstsSyn - 1) & step === steps-1 /*loopB === 2 & burstCount_B === (totalBurstsSyn - 1) & stepB === steps-1 & tempB_1 === 0*/);
 
 		DFEVar SN_control = ~readingInput & (wordCountSN === 0 & tempSN === 0 & loop2Bool & n_fin < M_S_u);
-		//DFEVar burstCount_A = loopA === 0 ? burstCountA : burstCountA_2;
 		DFEVar burstCount_SN = burstCountSN;
 		LMemCommandStream.makeKernelOutput("SNcmdStream",
 				SN_control,                 // control
@@ -284,8 +279,6 @@ class SimulationKernel extends Kernel {
 		DFEVector<DFEVar> syn = io.input("SynIn", SynapsesVector, (loop2Bool & temp2_B_1 === 0) | (loop3Bool & temp3_B_1 === 0));
 		DFEVector<DFEVar> x = io.input("X", vectorVars, (loop1Bool & temp1.eq(0)) | (loop2Bool & temp2_A_1 === 0 & temp2_A_2 === 0) | (loop3Bool & temp3_A_1 === 0 & temp3_A_2 === 0));
 		DFEVector<DFEVar> x_copy = x;
-		//x_copy[0].simWatch("vt");
-		//syn[6].simWatch("u_in");
 		// **************** SOLVE NEURONS START **************** //
 		DFEVar vt = x[0];
 		DFEVar vm = x[1];
@@ -296,18 +289,14 @@ class SimulationKernel extends Kernel {
 		DFEVar _vm, _vt, _x;
 		_vm = (gL*(EL-vm)+gL*DeltaT*KernelMath.exp((vm-vt)/DeltaT)+I-x_var)/C;
 		_vt = -(vt-vtrest)/tauvt;
-		//vtrest.simWatch("vtrest");
-		//tauvt.simWatch("tauvt");
-		//_vt.simWatch("vt_c");
 		_x = (c*(vm-EL)-x_var)/tauw;
 		DFEVar vm_o = vm + _vm * defaultclock_dt;
         DFEVar vt_o = vt + _vt * defaultclock_dt;
         DFEVar x_o = x_var + _x * defaultclock_dt;
-        DFEVar I_o = I;	// I must be read from memory in every timestep
+        DFEVar I_o = I;
         DFEVar Spike_o = Spike;
 
         DFEVar control = vm_o > vt_o;
-        //control.simWatch("control");
 
         vm_o = control ? Vr : vm_o;
         x_o = control ? x_o + b : x_o;
@@ -323,57 +312,28 @@ class SimulationKernel extends Kernel {
 		x_o_arr[4] <== Spike_o;
 		x_o_arr[5] <== x[5];
 
-		//x_o_arr.simWatch("x_o_arr");
 		// ************* SOLVE NEURONS END ****************** //
 
 		// ********** UPDATE SYNAPSES PRE START ************* //
 		DFEVar InputSpike = io.input("InputSpikes", dfeUInt(8), loop2Bool & n_fin >= M_S_u & m_fin === 0 & temp2_A_2 === 0);
-		//(loop2Bool & n_fin >= M_S_u & m_fin === 0 & temp2_A_2 === 0).simWatch("Input_Spike_Enable");
-		//InputSpike.simWatch("InputSpike");
 		// Saving Input Spikes in FMEM
 		int max_N = 20352;
 		int max_N_bits = MathUtils.bitsToAddress(max_N);
 
-		DFEVar InputSpikeAddr = n_fin.cast(dfeUInt(max_N_bits)); // PROBABLY THIS SHOULD BE (n_fin-M_S_u).cast(dfeUInt(max_N_bits));
+		DFEVar InputSpikeAddr = n_fin.cast(dfeUInt(max_N_bits));
 		Memory<DFEVar> InputSpikes = mem.alloc(dfeUInt(8), max_N);
-		InputSpikes.write(InputSpikeAddr, InputSpike, /*m_fin === 0 & loop2Bool*/loop2Bool & n_fin >= M_S_u & m_fin === 0 & temp2_A_2 === 0);
+		InputSpikes.write(InputSpikeAddr, InputSpike, loop2Bool & n_fin >= M_S_u & m_fin === 0 & temp2_A_2 === 0);
 
 		DFEVar spike = (m_fin === 0) ? InputSpike : InputSpikes.read(InputSpikeAddr);
-		//spike.simWatch("spike");
 		DFEVector<DFEVar> spike_vec = InputSpikesVector.newInstance(this);
 		spike_vec[0] <== (spike & 16)>>4;
 		spike_vec[1] <== (spike & 1);
-		//spike_vec[0].simWatch("spke_vec0");
-		//spike_vec[1].simWatch("spke_vec1");
 
 		DFEVector<DFEVar> SourceNeuron = io.input("SourceNeurons", vectorVarsSN, loop2Bool & tempSN === 0 & n_fin < M_S_u);
-		//SourceNeuron.simWatch("sourceneuron");
-		//DFEVar control_pre = ((n_fin<M_S & SourceNeuron[4] === 1) | (n_fin >= M_S & spike === 1)) & syn[0] === 1;
 		DFEVector<DFEVar> control_pre = VarVectorInt.newInstance(this);
 		for(int i = 0; i < Unroll_Factor; i++){
 			control_pre[i] <== ((n_fin<M_S_u & SourceNeuron[i*6+4] === 1) | (n_fin >= M_S_u & spike_vec[i] === 1)) & syn[i*12] === 1 & loop2Bool;
 		}
-		//control_pre[0].simWatch("control_pre0");
-		//control_pre[1].simWatch("control_pre1");
-		//DFEVar FFp = control_pre ? syn[2] * KernelMath.exp(-(-syn[9] + t)/tau_FFp) : syn[2];
-		//DFEVar FBn = control_pre ? syn[4] * KernelMath.exp(-(-syn[9] + t)/tau_FBn) : syn[4];
-
-		//control_pre.simWatch("control_pre");
-		//DFEVar u = control_pre ? syn[7] + (-syn[7] + syn[6]) * KernelMath.exp(-(-syn[9] + t)/tau_u) : syn[6];
-		//u.simWatch("u");
-		//DFEVar FBp = control_pre ? syn[3] * KernelMath.exp(-(-syn[9] + t)/tau_FBp) : syn[3];
-		//DFEVar R = control_pre ? (syn[5] - 1) * KernelMath.exp(-(-syn[9] + t)/tau_r) + 1 : syn[5];
-		//DFEVar targetI = control_pre ? s * syn[8] * R * u : syn[10];
-		//targetI.simWatch("targetI");
-		//DFEVar U = control_pre ? syn[7] + etaU * (-AFBn * FBn * FBp + AFBp * FBp * FFp) : syn[7];
-		//U = control_pre & (U < Umin) ? Umin : U;
-		//U = control_pre & (U > Umax) ? Umax : U;
-		//DFEVar w = control_pre ? U * syn[8] : syn[1];
-		//FFp = control_pre ? FFp + 1 : FFp;
-		//R = control_pre ? R - R * u : R;
-		//u = control_pre ? u + U * (1-u) : u;
-		//u.simWatch("u");
-		//DFEVar lastupdate = control_pre ? t : syn[9];
 
 		DFEVector<DFEVar> FFp = VarVector.newInstance(this);
 		DFEVector<DFEVar> FFp_t = VarVector.newInstance(this);
@@ -408,41 +368,18 @@ class SimulationKernel extends Kernel {
 		}
 
 		DFEVector<DFEVar> x_t = vectorVars.newInstance(this);
-		DFEVector<DFEVar> x_tt = vectorVars.newInstance(this);
 		DFEVector<DFEVar> x_out_p = vectorVars.newInstance(this);
-		//DFEVector<DFEVar> tempI = vectorVars.newInstance(this);
 		x_t = n_fin === 0 ? x_copy : stream.offset(x_out_p,-loop2Length/*loopLength*/);
 		DFEVar tempI = control_pre[0] ? targetI[0] : x_t[2];
 		DFEVar tempI_t = control_pre[1] ? targetI[1] : tempI;
-		//x_t[2].simWatch("x_t_I");
-		//x_tt = loop_counter === 0 ? x_t : x_tt;
 		x_out_p[0] <== x_t[0];
 		x_out_p[1] <== x_t[1];
 		x_out_p[2] <== tempI_t;
-		//x_out_p[2].simWatch("x_o_I");
 		x_out_p[3] <== x_t[3];
 		x_out_p[4] <== x_t[4];
 		x_out_p[5] <== x_t[5];
-		//x_out_p[2].simWatch("xO_i");
-		//x_t[2].simWatch("xT_i");
-
-
-
-
 
 		DFEVector<DFEVar> syn_o_p = SynapsesVector.newInstance(this);
-		//syn_o_p[0] <== syn[0];
-		//syn_o_p[1] <== w;
-		//syn_o_p[2] <== FFp;
-		//syn_o_p[3] <== FBp;
-		//syn_o_p[4] <== FBn;
-		//syn_o_p[5] <== R;
-		//syn_o_p[6] <== u;
-		//syn_o_p[7] <== U;
-		//syn_o_p[8] <== syn[8];
-		//syn_o_p[9] <== lastupdate;
-		//syn_o_p[10] <== targetI;
-		//syn_o_p[11] <== syn[11];
 		for(int i = 0; i < Unroll_Factor; i++){
 			syn_o_p[i*12] <== syn[i*12];
 			syn_o_p[i*12+1] <== w[i];
@@ -462,14 +399,6 @@ class SimulationKernel extends Kernel {
 		// ********** UPDATE SYNAPSES POST START *********** //
 
 		// loop = 0 calculations
-		//DFEVar control_post_1 = x[4] === 1 & syn[0] === 1 & loop2Bool;
-		//DFEVar FFp_po = control_post_1 ? syn_o_p[2] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FFp) : syn_o_p[2];
-		//DFEVar FBn_po = control_post_1 ? syn_o_p[4] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FBn) : syn_o_p[4];
-		//DFEVar u_po = control_post_1 ? syn_o_p[7] + (-syn_o_p[7] + syn_o_p[6]) * KernelMath.exp(-(-syn_o_p[9] + t)/tau_u) : syn_o_p[6];
-//		u.cast(double_type).simWatch("u");
-		//DFEVar FBp_po = control_post_1 ? syn_o_p[3] * KernelMath.exp(-(-syn_o_p[9] + t)/tau_FBp) : syn_o_p[3];
-		//DFEVar R_po = control_post_1 ? (syn_o_p[5] - 1) * KernelMath.exp(-(-syn_o_p[9] + t)/tau_r) + 1 : syn_o_p[5];
-		//DFEVar A_po = control_post_1 ? syn_o_p[8] + etaA * (AFFp * FFp_po * FBn_po) : syn_o_p[8];
 		DFEVector<DFEVar> control_post_1 = VarVectorInt.newInstance(this);
 		DFEVector<DFEVar> FFp_po = VarVector.newInstance(this);
 		DFEVector<DFEVar> FBn_po = VarVector.newInstance(this);
@@ -480,12 +409,6 @@ class SimulationKernel extends Kernel {
 		for(int i = 0; i < Unroll_Factor; i++){
 			control_post_1[i] <== x[4] === 1 & syn[i*12] === 1 & loop2Bool;
 		}
-		//x[4].simWatch("x_spike");
-		//syn[0].simWatch("conn0");
-		//syn[12].simWatch("conn1");
-		//loop2Bool.simWatch("loop2Bool");
-		//control_post_1[0].simWatch("control_post_1_0");
-		//control_post_1[1].simWatch("control_post_1_1");
 		for(int i = 0; i < Unroll_Factor; i++){
 			FFp_po[i] <== control_post_1[i] ? syn_o_p[i*12+2] * KernelMath.exp(-(-syn_o_p[i*12+9] + t)/tau_FFp) : syn_o_p[i*12+2];
 			FBn_po[i] <== control_post_1[i] ? syn_o_p[i*12+4] * KernelMath.exp(-(-syn_o_p[i*12+9] + t)/tau_FBn) : syn_o_p[i*12+4];
@@ -497,18 +420,6 @@ class SimulationKernel extends Kernel {
 		// loop = 0 calculations finish
 
 		DFEVector<DFEVar> syn_o_po = SynapsesVector.newInstance(this);
-		//syn_o_po[0] <== syn[0];
-		//syn_o_po[1] <== w;
-		//syn_o_po[2] <== FFp_po;
-		//syn_o_po[3] <== FBp_po;
-		//syn_o_po[4] <== FBn_po;
-		//syn_o_po[5] <== R_po;
-		//syn_o_po[6] <== u_po;
-		//syn_o_po[7] <== U;
-		//syn_o_po[8] <== A_po;
-		//syn_o_po[9] <== lastupdate;
-		//syn_o_po[10] <== targetI;
-		//syn_o_po[11] <== syn[11];
 
 		for(int i = 0; i < Unroll_Factor; i++){
 			syn_o_po[i*12] <== syn[i*12];
@@ -532,12 +443,6 @@ class SimulationKernel extends Kernel {
 		DFEVar sum_t = m_fin === 0 & n_fin === 0 & loop2Bool ? constant.var(0) : carriedSum;
 		DFEVar num_t = m_fin === 0 & n_fin === 0 & loop2Bool ? constant.var(0) : carriedNum;
 
-		//sum_t = control_post_1 ? sum_t + AFFp * FFp_po * FBn_po : sum_t;
-
-		//FFp_po.simWatch("FFp_po");
-		//FBn_po.simWatch("FBn_po");
-		//sum_t.simWatch("sum_t");
-		//num_t = control_post_1 ? num_t + 1 : num_t;
 		DFEVector<DFEVar> add = VarVectorD.newInstance(this);
 		DFEVector<DFEVar> add_t = VarVectorD.newInstance(this);
 		DFEVector<DFEVar> num = VarVectorD.newInstance(this);
@@ -551,31 +456,16 @@ class SimulationKernel extends Kernel {
 		DFEVar sum_add = add[0] + add[1];
 		DFEVar num_add = num[0] + num[1];
 		sum_t = sum_t + sum_add;
-		//sum_t.cast(double_type).simWatch("sum_t");
 		num_t = num_t + num_add;
 
 		carriedSum <== stream.offset(sum_t, -loop2Length/*loopLength*/);
 		carriedNum <== stream.offset(num_t, -loop2Length/*loopLength*/);
 
 		DFEVar mean_t = sum_t/num_t;
-		//mean_t.simWatch("mean_t");
 		DFEVar mean_fin = loop3Bool ? mean_t : constant.var(0);
-		//mean_fin.cast(double_type).simWatch("mean_fin");
 		// Mean calculation part finish
 
 		// loop = 1 calculations
-		//DFEVar control_post_2 = x[4] === 1 & syn[0] === 1 & loop3Bool;
-		//DFEVar temp = etaA * 0.5 * mean_fin;
-		//DFEVar A_po_1 = control_post_2 ? syn[8] - temp : syn[8];
-		//A_1.simWatch("A_1");
-		//DFEVar A_po_t = A_po_1 < Amin & control_post_2 ? Amin : A_po_1;
-		//A_t.simWatch("A_t");
-		//DFEVar A_po_tt = A_po_t > Amax & control_post_2 ? Amax : A_po_t;
-		//A_tt.simWatch("A_tt");
-		//DFEVar w_po =  control_post_2 ? syn[7] * A_po_tt : syn[1];
-		//DFEVar FBp_po_1 =  control_post_2 ? syn[3] + 1 : syn[3];
-		//DFEVar FBn_po_1 =  control_post_2 ? syn[4] + 1 : syn[4];
-		//DFEVar lastupdate_po = control_post_2 ? t : syn[9];
 
 		DFEVector<DFEVar> control_post_2 = VarVectorInt.newInstance(this);
 		DFEVector<DFEVar> temp = VarVector.newInstance(this);
@@ -589,8 +479,6 @@ class SimulationKernel extends Kernel {
 		for(int i = 0; i < Unroll_Factor; i++){
 			control_post_2[i] <== x[4] === 1 & syn[i*12] === 1 & loop3Bool;
 		}
-		//control_post_2[0].simWatch("control_post_2_0");
-		//control_post_2[1].simWatch("control_post_2_1");
 		for(int i = 0; i < Unroll_Factor; i++){
 			temp[i] <== etaA * 0.5 * mean_fin.cast(double_type);
 			A_po_1[i] <== control_post_2[i] ? syn[i*12+8] - temp[i] : syn[i*12+8];
@@ -601,33 +489,8 @@ class SimulationKernel extends Kernel {
 			FBn_po_1[i] <==  control_post_2[i] ? syn[i*12+4] + 1 : syn[i*12+4];
 			lastupdate_po[i] <== control_post_2[i] ? t : syn[i*12+9];
 		}
-		//syn[8].cast(double_type).simWatch("A_po_0");
-		//syn[12+8].cast(double_type).simWatch("A_po_1");
-		//A_po_1[0].cast(double_type).simWatch("A_po_1_0");
-		//A_po_1[1].cast(double_type).simWatch("A_po_1_1");
-		// loop = 1 calculations finish
-
-		// Connecting Output
-		//DFEVar FBp_fin = loopA === 1 ? FBp_po : FBp_po_1;
-		//DFEVar FBn_fin = loopA === 1 ? FBn_po : FBn_po_1;
-		//DFEVar A_fin = loopA === 1 ? A_po : A_po_tt;
-//		A_fin.cast(double_type).simWatch("A_fin");
 		DFEVector<DFEVar> syn_o = SynapsesVector.newInstance(this);
 
-		//syn_o[0] <== syn[0];
-		//syn_o[1] <== w_po;
-		//syn_o[2] <== syn[2];
-		//syn_o[3] <== FBp_po_1;
-		//syn_o[4] <== FBn_po_1;
-		//syn_o[5] <== syn[5];
-		//syn_o[6] <== syn[6];
-		//syn[6].simWatch("syn_6");
-		//syn_o[6].simWatch("syn_o_6");
-		//syn_o[7] <== syn[7];
-		//syn_o[8] <== A_po_tt;
-		//syn_o[9] <== lastupdate_po;
-		//syn_o[10] <== syn[10];
-		//syn_o[11] <== syn[11];
 		for(int i = 0; i < Unroll_Factor; i++){
 			syn_o[i*12] <== syn[i*12];
 			syn_o[i*12+1] <== w_po[i];
@@ -644,14 +507,21 @@ class SimulationKernel extends Kernel {
 		}
 		// ********** UPDATE SYNAPSES POST END ************* //
 		DFEVector<DFEVar> x_out = loop1Bool ? x_o_arr : x_out_p;
-		//x_out[2].simWatch("x_out_I");
 		DFEVar x_control_out = (loop1Bool & temp1 === 0) | (loop2Bool & temp2_A_1 === temp2_A_1_max-1 & temp2_A_2 === loop2Length-1) ;
-		//x_control_out.simWatch("x_control_out");
 		io.output("XOut", x_out, vectorVars, x_control_out);
 		DFEVector<DFEVar> syn_out = loop2Bool ? syn_o_po : syn_o;
 		DFEVar syn_o_control = (loop2Bool & temp2_B_1 === loop2Length-1) | (loop3Bool & temp3_B_1 === loop3Length-1);
-		//syn_o_control.simWatch("syn_o_control");
 		io.output("SynOut", syn_out, SynapsesVector, syn_o_control);
+
+		DFEVectorType<DFEVar> NeuronVectorCPU =
+			new DFEVectorType<DFEVar>(double_type, 4);
+		DFEVector<DFEVar> NeuronCPU = NeuronVectorCPU.newInstance(this);
+		NeuronCPU[0] <== x_out[0];
+		NeuronCPU[1] <== x_out[1];
+		NeuronCPU[2] <== x_out[3];
+		NeuronCPU[3] <== x_out[4];
+		DFEVar NeuronCPUcontrol = loop2Bool & temp2_A_1 === temp2_A_1_max-1 & temp2_A_2 === loop2Length-1 & WriteEn === 1;
+		io.output("NeuronCPU", NeuronCPU, NeuronVectorCPU, NeuronCPUcontrol);
 	}
 
 }

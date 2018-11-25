@@ -32,8 +32,11 @@ public class SimulationManager extends CustomManager{
 
 		DFELink adex_par = addStreamFromCPU("adex_params");
 		DFELink stdp_par = addStreamFromCPU("stdp_params");
+		DFELink NeuronCPU = addStreamToCPU("NeuronCPU");
 		k.getInput("adex_params") <== adex_par;
 		k.getInput("stdp_params") <== stdp_par;
+		//k.getOutput("NeuronCPU") <== NeuronCPU;
+		NeuronCPU <== k.getOutput("NeuronCPU");
 
 		LMemInterface iface = addLMemInterface();
 		DFELink tolmem = iface.addStreamToLMem("tolmem",LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
@@ -111,6 +114,8 @@ public class SimulationManager extends CustomManager{
 		InterfaceParam  M_T    = engine_interface.addParam("M_T", CPUTypes.UINT64); //adex neurons target
 		InterfaceParam  steps   = engine_interface.addParam("Steps", CPUTypes.UINT32);
 		InterfaceParam  start   = engine_interface.addParam("Start", double_type);
+		InterfaceParam  WriteEn = engine_interface.addParam("WriteEn", CPUTypes.UINT32);
+		InterfaceParam  WriteStep = engine_interface.addParam("WriteStep", CPUTypes.UINT32);
 		InterfaceParam  zero = engine_interface.addConstant(0l);
 		InterfaceParam  one = engine_interface.addConstant(1l);
 
@@ -137,6 +142,8 @@ public class SimulationManager extends CustomManager{
 		InterfaceParam ticks = N_stdp + loop1Length*M_T*steps + (loop2Length*(N+M_S)*M_T +  loop3Length*(N+M_S)*M_T)*steps/Unroll_Factor/*+ loop2Length*(N+M_S)*M_T*/;
 		engine_interface.setTicks(s_kernelName, ticks);
 
+		engine_interface.setScalar(s_kernelName, "WriteEn", WriteEn);
+		engine_interface.setScalar(s_kernelName, "WriteStep", WriteStep);
 		engine_interface.setScalar(s_kernelName, "N", N);
 		engine_interface.setScalar(s_kernelName, "M_S", M_S);
 		engine_interface.setScalar(s_kernelName, "M_T", M_T);
@@ -146,6 +153,7 @@ public class SimulationManager extends CustomManager{
 		//InterfaceParam adjacency_matrix_size = (M_S + N) * M_T * 12 * double_size;
 		//engine_interface.setLMemLinear("syn", M_T * 6 * double_size, adjacency_matrix_size);
 		//engine_interface.setLMemLinear("syn_o", M_T * 6 * double_size, adjacency_matrix_size);
+		engine_interface.setStream("NeuronCPU", CPUTypes.FLOAT, WriteEn * M_T * (steps/WriteStep) * CPUTypes.FLOAT.sizeInBytes() * 4);
 		engine_interface.setStream("adex_params", CPUTypes.FLOAT,N_adex * CPUTypes.FLOAT.sizeInBytes());
 		engine_interface.setStream("stdp_params", CPUTypes.FLOAT,N_stdp * CPUTypes.FLOAT.sizeInBytes());
 		InterfaceParam adjacency_matrix_size = (M_S + N) * M_T * 12 * double_size;
