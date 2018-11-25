@@ -51,8 +51,39 @@ N_S: Number of Input Neurons\
 N_Group_S: Number of AdEx Neurons as Source\
 N_Group_T: Number of AdEx Neurons as Target\
 SpikeInt: Input Neurons Spike Interval\
-WriteEn: 1: Neuron Values output for every timestep, 0: Output only of the final step\
+WriteEn: 1: Neuron Values output for every timestep in "NeuronOut.csv", 0: Output only of the final step\
 AllConnected: 1: All connected, 0: Connections read from "connections.txt"\
-RunCPU: 1: Run CPU Code with doubles to check acceleration and errors, 0: Only DFE run\
+RunCPU: 1: Run CPU Code with doubles to check acceleration and errors, 0: Only DFE run
 
+## Example 1
 
+To run the following Simulation:\
+Number of Input Neurons: 10\
+Number of AdEx Neurons: 10\
+NxM Simulation (Input Neurons connected only to AdEx)\
+Simulation Steps: 1000 (1s)\
+Input Spikes Frequency: 1kHz (Spike Interval = 1 step)\
+Writing output in file for every timestep\
+All Input Neurons connected with all the AdEx Neurons\
+No running on CPU
+```
+./../RunRules/Simulation/Simulation 1000 10 0 10 1 1 0 1
+```
+
+## Example 2
+
+To run the following Simulation:\
+Number of Input Neurons: 0\
+Number of AdEx Neurons: 10\
+MxM Simulation (AdEx Neurons connected to each other)\
+Simulation Steps: 1000 (1s)\
+Input Spikes Frequency doesn't matter\
+Writing output in file for every timestep\
+Specific connections (Synapses) between AdEx Neurons specified in "connections.txt"\
+No running on CPU
+```
+./../RunRules/Simulation/Simulation 1000 0 10 10 1 1 0 0
+```
+
+The file that specifies the connections (Synapses) between Neurons must be formated as the example file in the repository, as an Adjacency Matrix.\
+The rows correspond to AdEx Neurons as Targets and the columns to Input Neurons or AdEx Neurons as Sources.
