@@ -85,5 +85,5 @@ No running on CPU
 ./../RunRules/Simulation/Simulation 1000 0 10 10 1 1 0 0
 ```
 
-The file that specifies the connections (Synapses) between Neurons must be formated as the example file in the repository, as an Adjacency Matrix.\
+The file "connections.txt" that specifies the connections (Synapses) between Neurons must be formated as the example file in the repository, as an Adjacency Matrix.\
 The rows correspond to AdEx Neurons as Targets and the columns to Input Neurons or AdEx Neurons as Sources.
