@@ -1,0 +1,38 @@
+N_S_pad = 0, N_Group_S_pad = 384, N_Group_T_pad = 384
+F_input done.
+Neuron Initialization done.
+Synapses Connectivity Initialization done.
+Synapses Initialization done.
+timesteps=10
+Input Spikes Initialization done.
+Writing to LMem.
+Neurons Write Done.
+Synapses Write Done.
+Running on DFE.
+249205632033 max_ticks
+29498912 ticks
+rec = 0
+rec = 0, step = 0
+step = 10
+time = 0.000000, step = 10
+DFE Runtime = 1082.3793710 seconds
+memory_reads = 4.803039, memory_writes = 6.151978, DFE_time = 1082.379371
+Neurons malloc done
+Spike Array malloc done
+Synapses malloc done
+CPU Time: 0.269460
+Acceleration: 0.000249
+Neurons vt: Average error= 0.00000000e+00 Relative Average Error= -nan
+Neurons vm: Average error= -3.75947699e-10 Relative Average Error= 5.13235285e-09
+Neurons I: Average error= 1.56042779e-02 Relative Average Error= 8.43021962e-06
+Neurons x: Average error= -1.38967739e-17 Relative Average Error= -3.26659240e-08
+Synapses w: Average error= 0.00000000e+00 Relative Average Error= -nan
+Synapses FFp: Average error= -4.47957301e-07 Relative Average Error= -8.68159458e-08
+Synapses FBp: Average error= 1.08163652e-04 Relative Average Error= 1.12092751e-08
+Synapses FBn: Average error= -5.10270497e-04 Relative Average Error= -6.22379226e-08
+sum_CPU = 1.26692061e+03, sum_DFE = 1.26691388e+03
+Synapses R: Average error= 4.56259161e-08 Relative Average Error= 5.31036833e-06
+Synapses u: Average error= -2.07258990e-07 Relative Average Error= -2.34577787e-07
+sum_CPU = 2.15740571e+01, sum_DFE = 2.15740578e+01
+Synapses U: Average error= -4.75813421e-12 Relative Average Error= -3.25212562e-08
+Synapses A: Average error= 7.52344360e-11 Relative Average Error= 5.47881073e-11
