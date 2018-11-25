@@ -520,7 +520,7 @@ class SimulationKernel extends Kernel {
 		NeuronCPU[1] <== x_out[1];
 		NeuronCPU[2] <== x_out[3];
 		NeuronCPU[3] <== x_out[4];
-		DFEVar NeuronCPUcontrol = loop2Bool & temp2_A_1 === temp2_A_1_max-1 & temp2_A_2 === loop2Length-1 & WriteEn === 1;
+		DFEVar NeuronCPUcontrol = loop1Bool & temp1 === 0 & WriteEn === 1;
 		io.output("NeuronCPU", NeuronCPU, NeuronVectorCPU, NeuronCPUcontrol);
 	}
 
