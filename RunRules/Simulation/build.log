@@ -1,0 +1,50 @@
+Sun 20:12: ########################################## 
+Sun 20:12: Compiling.
+Sun 20:12: ########################################## 
+
+Sun 20:12: MaxCompiler version: 2017.2.1.
+Sun 20:12: Build Simulation run rule for SingleKernel_float_unroll3 start time: Sun Nov 25 20:12:11 EET 2018.
+Sun 20:12: Project location: /home/ioannmag/workspace/SingleKernel_float_unroll3.
+Sun 20:12: Detailed build log: /home/ioannmag/workspace/SingleKernel_float_unroll3/RunRules/Simulation/build.log.
+
+Sun 20:12: Compiling Engine Code.
+Sun 20:12: Building Simulation.max file. 
+Sun 20:12: Setting environment variable:
+Sun 20:12: MAXCOMPILER_BUILD_DIR : /home/ioannmag/workspace/SingleKernel_float_unroll3/RunRules/Simulation/maxfiles
+Sun 20:12: MAX_BUILDPARAMS : DFEModel='MAIA' target='DFE_SIM' maxFileName='Simulation'  
+Sun 20:12: Building output:
+Sun 20:12: MaxCompiler version: 2017.2.1
+Sun 20:12: Build "Simulation" start time: Sun Nov 25 20:12:12 EET 2018
+Sun 20:12: Main build process running as user ioannmag on host mummra.microlab.ntua.gr
+Sun 20:12: Build location: /home/ioannmag/workspace/SingleKernel_float_unroll3/RunRules/Simulation/maxfiles/Simulation_MAIA_DFE_SIM
+Sun 20:12: Detailed build log available in "_build.log"
+Sun 20:12: ERROR: +++++ License error. We have been unable to confirm that you have a license to run MaxCompiler.
+Sun 20:12: ERROR: You may need to obtain an updated license file from Maxeler.
+Sun 20:12: ERROR: 
+Sun 20:12: ERROR: +++++ Details of error(s) triggered +++++
+Sun 20:12: ERROR: License error: expiry date check fails.
+Sun 20:12: ERROR: License error: expiry date check fails.
+Sun 20:12: ERROR: 
+Sun 20:12: ERROR: +++++ Full details of valid licenses:
+Sun 20:12: ERROR: {configuration=[],features=[{
+Sun 20:12: ERROR: feature="MaxCompiler_core",version=,owner=NTUA,expiry={clock=system,enforce=error,expiry=2017-11-21},release={start=1900-01-01,end=2017-11-21},fuse=,nodes={0C:C4:7A:6C:9B:7A},cards={},
+Sun 20:12: ERROR:     sig=302c0214271e345b3a056235fcb73bb12254f2a3418622920214453a911d1073d922ae705edea66089b65613ad96,sigValid=true}, {
+Sun 20:12: ERROR: feature="MaxGenFD",version=,owner=NTUA,expiry={clock=system,enforce=error,expiry=2017-11-21},release={start=1900-01-01,end=2017-11-21},fuse=,nodes={0C:C4:7A:6C:9B:7A},cards={},
+Sun 20:12: ERROR:     sig=302c02144aa45bfdefabf3af2f23415a81d3adb7450813c9021448340ee4d5aac85780219dc4bb3b4e29264415ca,sigValid=true}, {
+Sun 20:12: ERROR: feature="MaxCompiler_core",version=,owner=NTUA,expiry={clock=system,enforce=error,expiry=2018-11-22},release={start=1900-01-01,end=2018-11-22},fuse=,nodes={0C:C4:7A:6C:9B:7A,52:54:00:5B:54:EE},cards={},
+Sun 20:12: ERROR:     sig=302d0215008e35f0e0a66dfdf4877fab359612611abef4758c021407c6d6a5bfc401ba44ac987b7dff5fc9fd119555,sigValid=true}, {
+Sun 20:12: ERROR: feature="MaxGenFD",version=,owner=NTUA,expiry={clock=system,enforce=error,expiry=2018-11-22},release={start=1900-01-01,end=2018-11-22},fuse=,nodes={0C:C4:7A:6C:9B:7A,52:54:00:5B:54:EE},cards={},
+Sun 20:12: ERROR:     sig=302c021410efa555ea522a1762e1413c6eb7905200738a1402145b9edfa003b7428cdc2e5c984e4ca23823666179,sigValid=true}]}
+Sun 20:12: ERROR: 
+Sun 20:12: ERROR: +++++ Found 2 license file(s):
+Sun 20:12: ERROR: /opt/maxcompiler2017.2.1/licenses/2017-11-21-Maxeler-MaxCompilerMaxGenFD-NTUA.lic
+Sun 20:12: ERROR: /opt/maxcompiler2017.2.1/licenses/2018-11-22-Maxeler-MaxCompilerMaxGenFD-NTUA.lic
+Sun 20:12: ERROR: 
+Sun 20:12: ERROR: Cannot find a valid license for feature 'MaxCompiler_core' version 2017.2.1; exiting now.
+Sun 20:12: ERROR: Note: In some cases if you have a valid license, this can be caused if your network interface device is not set-up or is disconnected from a real network.
+Sun 20:12: Building: Simulation.max file finished.
+Sun 20:12: Build process failed while trying to create Simulation.max file
+Sun 20:12: null
+Sun 20:12: Build failed: Sun Nov 25 20:12:12 EET 2018
+
+

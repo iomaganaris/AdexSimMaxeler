@@ -871,8 +871,8 @@ int main(int argc, char * argv[])
 	fflush(stdout);
 
 	// Printing Final Values of AdEx Neurons and Synapses
-	//print_neurons(x, N_Group_T);
-	//print_synapses(syn,N_S, N_S_pad, N_Group_S, N_Group_S_pad, N_Group_T, N_Group_T_pad);
+	print_neurons(x, N_Group_T);
+	print_synapses(syn,N_S, N_S_pad, N_Group_S, N_Group_S_pad, N_Group_T, N_Group_T_pad);
 	//fflush(stdout);
 
 	// Printing to file AdEx Neurons Variables at every timestep

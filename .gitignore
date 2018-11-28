@@ -1,3 +1,6 @@
-/RunRules
+/RunRules/DFE/binaries/*
+/RunRules/DFE/maxfiles/*
+/RunRules/DFE/objects/*
+/RunRules/DFE/build.log
 /CPUCode/debug*
 /CPUCode/out*.txt
